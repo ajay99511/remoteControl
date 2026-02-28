@@ -104,7 +104,7 @@ class ConnectionNotifier extends Notifier<DeviceConnectionState> {
 
   /// Factory method — instantiate the correct controller for the device type.
   DeviceController _buildController(Device device) {
-    if (device.id.startsWith('mock-') || device.id.startsWith('manual-')) {
+    if (device.id.startsWith('mock-')) {
       return MockController(deviceName: device.name);
     }
 

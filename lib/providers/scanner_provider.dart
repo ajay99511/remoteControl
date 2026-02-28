@@ -46,9 +46,6 @@ class ScannerNotifier extends Notifier<ScannerState> {
   Future<void> startScan() async {
     state = state.copyWith(isScanning: true, devices: [], error: null);
 
-    // Simulated device discovery sequence
-    _simulateDiscovery();
-
     // Service types that Roku and other smart devices advertise
     final serviceTypes = [
       '_roku._tcp', // Roku-specific
@@ -84,59 +81,6 @@ class ScannerNotifier extends Notifier<ScannerState> {
     }
   }
 
-  void _simulateDiscovery() {
-    // Add mock Roku
-    Future.delayed(const Duration(seconds: 2), () {
-      if (!state.isScanning) return;
-      final mockRoku = Device(
-        id: 'mock-roku',
-        name: 'Living Room TV',
-        type: 'roku',
-        model: 'Roku Ultra',
-        signal: 100,
-        ip: '192.168.1.100',
-        port: 8060,
-      );
-      if (!state.devices.any((d) => d.id == mockRoku.id)) {
-        state = state.copyWith(devices: [...state.devices, mockRoku]);
-      }
-    });
-
-    // Add mock Chromecast
-    Future.delayed(const Duration(seconds: 4), () {
-      if (!state.isScanning) return;
-      final mockChromecast = Device(
-        id: 'mock-chromecast',
-        name: 'Bedroom Audio',
-        type: 'chromecast',
-        model: 'Chromecast Audio',
-        signal: 85,
-        ip: '192.168.1.101',
-        port: 8009,
-      );
-      if (!state.devices.any((d) => d.id == mockChromecast.id)) {
-        state = state.copyWith(devices: [...state.devices, mockChromecast]);
-      }
-    });
-
-    // Add mock AirPlay
-    Future.delayed(const Duration(seconds: 6), () {
-      if (!state.isScanning) return;
-      final mockAirplay = Device(
-        id: 'mock-airplay',
-        name: 'Kitchen Speaker',
-        type: 'airplay',
-        model: 'Apple TV',
-        signal: 90,
-        ip: '192.168.1.102',
-        port: 7000,
-      );
-      if (!state.devices.any((d) => d.id == mockAirplay.id)) {
-        state = state.copyWith(devices: [...state.devices, mockAirplay]);
-      }
-    });
-  }
-
   /// Stop all active discoveries and release resources.
   Future<void> stopScan() async {
     for (final discovery in _discoveries) {
@@ -158,7 +102,11 @@ class ScannerNotifier extends Notifier<ScannerState> {
     final port = service.port ?? 0;
     final type = service.type ?? '';
 
-    if (name.isEmpty || host.isEmpty) return;
+    // Extract real IP address from resolved addresses, fallback to host
+    final addresses = service.addresses ?? [];
+    final ip = addresses.isNotEmpty ? addresses.first.address : host;
+
+    if (name.isEmpty || ip.isEmpty) return;
 
     // Determine device type based on service metadata
     String deviceType;
@@ -174,23 +122,23 @@ class ScannerNotifier extends Notifier<ScannerState> {
       deviceType = 'wifi';
     }
 
-    // Filter out duplicates by host+port
+    // Filter out duplicates by ip+port
     final existing = state.devices;
-    if (existing.any((d) => d.ip == host && d.port == port)) return;
+    if (existing.any((d) => d.ip == ip && d.port == port)) return;
 
     final device = Device(
-      id: '$host:$port',
+      id: '$ip:$port',
       name: name,
       type: deviceType,
       model: type.replaceAll('._tcp', '').replaceAll('_', ''),
       signal: 100,
-      ip: host,
+      ip: ip,
       port: port,
     );
 
     state = state.copyWith(devices: [...existing, device]);
     debugPrint(
-      'ScannerNotifier: Found device "$name" at $host:$port ($deviceType)',
+      'ScannerNotifier: Found device "$name" at $ip:$port ($deviceType)',
     );
   }
 }
