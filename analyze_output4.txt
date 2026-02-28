@@ -1,0 +1,5 @@
+Analyzing devicecontroller...                                   
+
+   info - Don't invoke 'print' in production code - dart_code\lib\screens\remote.dart:70:5 - avoid_print
+
+1 issue found. (ran in 6.1s)

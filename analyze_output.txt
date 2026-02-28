@@ -1,0 +1,65 @@
+Analyzing devicecontroller...                                   
+
+  error - Target of URI doesn't exist: 'package:google_fonts/google_fonts.dart' - dart_code\lib\main.dart:4:8 - uri_does_not_exist
+  error - Target of URI doesn't exist: 'package:flutter_secure_storage/flutter_secure_storage.dart' - dart_code\lib\main.dart:5:8 - uri_does_not_exist
+  error - The name 'FlutterSecureStorage' isn't a class - dart_code\lib\main.dart:24:26 - creation_with_non_type
+  error - Undefined name 'GoogleFonts' - dart_code\lib\main.dart:97:20 - undefined_identifier
+  error - Target of URI doesn't exist: 'package:flutter_animate/flutter_animate.dart' - dart_code\lib\screens\device_scanner.dart:3:8 - uri_does_not_exist
+  error - Target of URI doesn't exist: 'package:lucide_icons/lucide_icons.dart' - dart_code\lib\screens\device_scanner.dart:4:8 - uri_does_not_exist
+  error - The method 'animate' isn't defined for the type 'Container' - dart_code\lib\screens\device_scanner.dart:203:20 - undefined_method
+  error - The getter 'seconds' isn't defined for the type 'int' - dart_code\lib\screens\device_scanner.dart:205:33 - undefined_getter
+  error - The getter 'seconds' isn't defined for the type 'int' - dart_code\lib\screens\device_scanner.dart:209:40 - undefined_getter
+  error - The method 'animate' isn't defined for the type 'Container' - dart_code\lib\screens\device_scanner.dart:220:20 - undefined_method
+  error - The getter 'ms' isn't defined for the type 'int' - dart_code\lib\screens\device_scanner.dart:222:32 - undefined_getter
+  error - The getter 'seconds' isn't defined for the type 'int' - dart_code\lib\screens\device_scanner.dart:225:33 - undefined_getter
+  error - The getter 'seconds' isn't defined for the type 'int' - dart_code\lib\screens\device_scanner.dart:229:40 - undefined_getter
+  error - Invalid constant value - dart_code\lib\screens\device_scanner.dart:246:19 - invalid_constant
+  error - Undefined name 'LucideIcons' - dart_code\lib\screens\device_scanner.dart:246:19 - undefined_identifier
+  error - The method 'animate' isn't defined for the type 'Text' - dart_code\lib\screens\device_scanner.dart:262:16 - undefined_method
+  error - The getter 'seconds' isn't defined for the type 'int' - dart_code\lib\screens\device_scanner.dart:264:33 - undefined_getter
+  error - Undefined name 'LucideIcons' - dart_code\lib\screens\device_scanner.dart:278:17 - undefined_identifier
+  error - Undefined name 'LucideIcons' - dart_code\lib\screens\device_scanner.dart:284:17 - undefined_identifier
+  error - The method 'animate' isn't defined for the type 'Column' - dart_code\lib\screens\device_scanner.dart:289:7 - undefined_method
+  error - The getter 'ms' isn't defined for the type 'int' - dart_code\lib\screens\device_scanner.dart:289:38 - undefined_getter
+  error - Undefined name 'LucideIcons' - dart_code\lib\screens\device_scanner.dart:318:45 - undefined_identifier
+  error - Undefined name 'LucideIcons' - dart_code\lib\screens\device_scanner.dart:318:64 - undefined_identifier
+  error - Target of URI doesn't exist: 'package:flutter_animate/flutter_animate.dart' - dart_code\lib\screens\remote.dart:3:8 - uri_does_not_exist
+  error - Target of URI doesn't exist: 'package:lucide_icons/lucide_icons.dart' - dart_code\lib\screens\remote.dart:4:8 - uri_does_not_exist
+   info - Don't invoke 'print' in production code - dart_code\lib\screens\remote.dart:70:5 - avoid_print
+  error - Invalid constant value - dart_code\lib\screens\remote.dart:121:30 - invalid_constant
+  error - Undefined name 'LucideIcons' - dart_code\lib\screens\remote.dart:121:30 - undefined_identifier
+  error - Undefined name 'LucideIcons' - dart_code\lib\screens\remote.dart:184:15 - undefined_identifier
+  error - Invalid constant value - dart_code\lib\screens\remote.dart:247:25 - invalid_constant
+  error - Undefined name 'LucideIcons' - dart_code\lib\screens\remote.dart:247:25 - undefined_identifier
+  error - Invalid constant value - dart_code\lib\screens\remote.dart:260:25 - invalid_constant
+  error - Undefined name 'LucideIcons' - dart_code\lib\screens\remote.dart:260:25 - undefined_identifier
+  error - Invalid constant value - dart_code\lib\screens\remote.dart:273:25 - invalid_constant
+  error - Undefined name 'LucideIcons' - dart_code\lib\screens\remote.dart:273:25 - undefined_identifier
+  error - Invalid constant value - dart_code\lib\screens\remote.dart:286:25 - invalid_constant
+  error - Undefined name 'LucideIcons' - dart_code\lib\screens\remote.dart:286:25 - undefined_identifier
+  error - Undefined name 'LucideIcons' - dart_code\lib\screens\remote.dart:347:23 - undefined_identifier
+  error - Undefined name 'LucideIcons' - dart_code\lib\screens\remote.dart:351:34 - undefined_identifier
+  error - Undefined name 'LucideIcons' - dart_code\lib\screens\remote.dart:352:34 - undefined_identifier
+  error - Undefined name 'LucideIcons' - dart_code\lib\screens\remote.dart:364:25 - undefined_identifier
+  error - Undefined name 'LucideIcons' - dart_code\lib\screens\remote.dart:365:27 - undefined_identifier
+  error - Undefined name 'LucideIcons' - dart_code\lib\screens\remote.dart:372:27 - undefined_identifier
+  error - Undefined name 'LucideIcons' - dart_code\lib\screens\remote.dart:380:27 - undefined_identifier
+  error - Undefined name 'LucideIcons' - dart_code\lib\screens\remote.dart:388:25 - undefined_identifier
+  error - Undefined name 'LucideIcons' - dart_code\lib\screens\remote.dart:389:27 - undefined_identifier
+  error - Invalid constant value - dart_code\lib\screens\remote.dart:416:23 - invalid_constant
+  error - Undefined name 'LucideIcons' - dart_code\lib\screens\remote.dart:416:23 - undefined_identifier
+  error - Undefined name 'LucideIcons' - dart_code\lib\screens\remote.dart:454:23 - undefined_identifier
+  error - Undefined name 'LucideIcons' - dart_code\lib\screens\remote.dart:458:34 - undefined_identifier
+  error - Undefined name 'LucideIcons' - dart_code\lib\screens\remote.dart:459:34 - undefined_identifier
+  error - Invalid constant value - dart_code\lib\screens\remote.dart:590:21 - invalid_constant
+  error - Undefined name 'LucideIcons' - dart_code\lib\screens\remote.dart:590:21 - undefined_identifier
+  error - The method 'animate' isn't defined for the type 'Container' - dart_code\lib\screens\remote.dart:606:9 - undefined_method
+  error - The getter 'ms' isn't defined for the type 'int' - dart_code\lib\screens\remote.dart:606:59 - undefined_getter
+  error - Undefined name 'LucideIcons' - dart_code\lib\screens\remote.dart:627:32 - undefined_identifier
+  error - Undefined name 'LucideIcons' - dart_code\lib\screens\remote.dart:628:32 - undefined_identifier
+  error - Undefined name 'LucideIcons' - dart_code\lib\screens\remote.dart:629:32 - undefined_identifier
+  error - Undefined name 'LucideIcons' - dart_code\lib\screens\remote.dart:632:15 - undefined_identifier
+warning - The value of the field '_localIp' isn't used - lib\screens\device_scanner.dart:23:11 - unused_field
+   info - Don't invoke 'print' in production code - lib\screens\remote.dart:70:5 - avoid_print
+
+61 issues found. (ran in 8.1s)

@@ -1,0 +1,8 @@
+Analyzing devicecontroller...                                   
+
+   info - Don't invoke 'print' in production code - dart_code\lib\screens\remote.dart:70:5 - avoid_print
+   info - Statements in an if should be enclosed in a block - lib\screens\remote.dart:564:35 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block - lib\screens\remote.dart:566:35 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block - lib\screens\remote.dart:569:35 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block - lib\screens\remote.dart:571:35 - curly_braces_in_flow_control_structures
+

@@ -1,0 +1,6 @@
+Analyzing devicecontroller...                                   
+
+   info - Don't invoke 'print' in production code - dart_code\lib\screens\remote.dart:70:5 - avoid_print
+  error - The getter 'characters' isn't defined for the type 'String' - lib\controllers\roku_controller.dart:91:29 - undefined_getter
+
+2 issues found. (ran in 9.2s)
