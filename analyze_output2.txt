@@ -1,0 +1,7 @@
+Analyzing devicecontroller...                                   
+
+   info - Don't invoke 'print' in production code - dart_code\lib\screens\remote.dart:70:5 - avoid_print
+warning - The value of the field '_localIp' isn't used - lib\screens\device_scanner.dart:23:11 - unused_field
+   info - Don't invoke 'print' in production code - lib\screens\remote.dart:70:5 - avoid_print
+
+3 issues found. (ran in 7.2s)
