@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../controllers/device_controller.dart';
 import '../controllers/mock_controller.dart';
 import '../controllers/roku_controller.dart';
+import '../controllers/samsung_controller.dart';
 import '../models/device.dart';
 import '../models/remote_key.dart';
 
@@ -108,7 +109,12 @@ class ConnectionNotifier extends Notifier<DeviceConnectionState> {
       return MockController(deviceName: device.name);
     }
 
-    switch (device.type) {
+    switch (device.type.toLowerCase()) {
+      case 'samsung':
+        return SamsungController(
+          host: device.ip ?? device.id,
+          port: device.port ?? 8001,
+        );
       case 'roku':
         return RokuController(
           host: device.ip ?? device.id,

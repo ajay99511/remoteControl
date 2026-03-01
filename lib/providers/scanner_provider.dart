@@ -49,7 +49,10 @@ class ScannerNotifier extends Notifier<ScannerState> {
     // Service types that Roku and other smart devices advertise
     final serviceTypes = [
       '_roku._tcp', // Roku-specific
-      '_http._tcp', // Generic HTTP (Roku also advertises here)
+      '_http._tcp', // Generic HTTP (Roku/Samsung often uses this)
+      '_samsungtv._tcp', // Samsung Tizen specific
+      '_smart-tv._tcp', // Samsung occasionally uses this
+      '_samsungbridge._tcp', // Some Samsung devices
       '_googlecast._tcp', // Chromecast (future use)
       '_airplay._tcp', // AirPlay (future use)
     ];
@@ -114,6 +117,9 @@ class ScannerNotifier extends Notifier<ScannerState> {
         name.toLowerCase().contains('roku') ||
         type.contains('_roku')) {
       deviceType = 'roku';
+    } else if (name.toLowerCase().contains('samsung') ||
+        type.contains('samsung')) {
+      deviceType = 'samsung';
     } else if (type.contains('_googlecast')) {
       deviceType = 'chromecast';
     } else if (type.contains('_airplay')) {

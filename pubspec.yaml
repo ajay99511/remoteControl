@@ -44,6 +44,7 @@ dependencies:
   permission_handler: ^12.0.1
   flutter_riverpod: ^3.2.1
   http: ^1.2.0
+  web_socket_channel: ^3.0.3
 
 dev_dependencies:
   flutter_test:
