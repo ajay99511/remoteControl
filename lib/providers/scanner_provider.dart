@@ -1,3 +1,7 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nsd/nsd.dart';
@@ -58,18 +62,25 @@ class ScannerNotifier extends Notifier<ScannerState> {
     ];
 
     try {
-      for (final type in serviceTypes) {
-        final discovery = await startDiscovery(
-          type,
-          ipLookupType: IpLookupType.any,
-        );
-        _discoveries.add(discovery);
-        discovery.addServiceListener((service, status) {
-          if (status == ServiceStatus.found) {
-            _handleServiceFound(service);
-          }
-        });
+      // The `nsd` package has known threading issues on Windows and throws platform channel exceptions.
+      // We will skip mDNS entirely on Windows and rely solely on the SSDP fallback.
+      if (!kIsWeb && !Platform.isWindows) {
+        for (final type in serviceTypes) {
+          final discovery = await startDiscovery(
+            type,
+            ipLookupType: IpLookupType.any, // Use any as defined in nsd package
+          );
+          _discoveries.add(discovery);
+          discovery.addServiceListener((service, status) {
+            if (status == ServiceStatus.found) {
+              _handleServiceFound(service);
+            }
+          });
+        }
       }
+
+      // Also start SSDP discovery as a fallback for Windows where mDNS might fail
+      _startSsdpDiscovery();
 
       // Stop the scanning animation after 10 seconds, but keep
       // listening for new services in the background.
@@ -86,14 +97,16 @@ class ScannerNotifier extends Notifier<ScannerState> {
 
   /// Stop all active discoveries and release resources.
   Future<void> stopScan() async {
-    for (final discovery in _discoveries) {
+    final activeDiscoveries = List<Discovery>.from(_discoveries);
+    _discoveries.clear();
+
+    for (final discovery in activeDiscoveries) {
       try {
         await stopDiscovery(discovery);
       } catch (e) {
         debugPrint('ScannerNotifier: Error stopping discovery — $e');
       }
     }
-    _discoveries.clear();
     state = state.copyWith(isScanning: false);
   }
 
@@ -113,13 +126,17 @@ class ScannerNotifier extends Notifier<ScannerState> {
 
     // Determine device type based on service metadata
     String deviceType;
+    int resolvedPort = port;
     if (port == 8060 ||
         name.toLowerCase().contains('roku') ||
         type.contains('_roku')) {
       deviceType = 'roku';
+      if (resolvedPort == 80) resolvedPort = 8060;
     } else if (name.toLowerCase().contains('samsung') ||
         type.contains('samsung')) {
       deviceType = 'samsung';
+      // If we found a Samsung device but mDNS gave us port 80, assume 8002
+      if (resolvedPort == 80) resolvedPort = 8002;
     } else if (type.contains('_googlecast')) {
       deviceType = 'chromecast';
     } else if (type.contains('_airplay')) {
@@ -130,10 +147,10 @@ class ScannerNotifier extends Notifier<ScannerState> {
 
     // Filter out duplicates by ip+port
     final existing = state.devices;
-    if (existing.any((d) => d.ip == ip && d.port == port)) return;
+    if (existing.any((d) => d.ip == ip && d.port == resolvedPort)) return;
 
     final device = Device(
-      id: '$ip:$port',
+      id: '$ip:$resolvedPort',
       name: name,
       type: deviceType,
       model: type.replaceAll('._tcp', '').replaceAll('_', ''),
@@ -144,7 +161,114 @@ class ScannerNotifier extends Notifier<ScannerState> {
 
     state = state.copyWith(devices: [...existing, device]);
     debugPrint(
-      'ScannerNotifier: Found device "$name" at $ip:$port ($deviceType)',
+      'ScannerNotifier: Found device "$name" at $ip:$port ($deviceType) via mDNS',
+    );
+  }
+
+  /// Fallback SSDP (Simple Service Discovery Protocol) scanner.
+  /// Extremely useful on Windows where Bonjour/mDNS might be unavailable or blocked.
+  Future<void> _startSsdpDiscovery() async {
+    try {
+      final socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
+      socket.broadcastEnabled = true;
+
+      // SSDP M-SEARCH payload (discover all upnp devices)
+      const searchMessage =
+          'M-SEARCH * HTTP/1.1\r\n'
+          'HOST: 239.255.255.250:1900\r\n'
+          'MAN: "ssdp:discover"\r\n'
+          'MX: 3\r\n'
+          'ST: ssdp:all\r\n\r\n';
+
+      final data = utf8.encode(searchMessage);
+      final multicastAddress = InternetAddress('239.255.255.250');
+
+      socket.send(data, multicastAddress, 1900);
+
+      socket.listen((RawSocketEvent event) {
+        if (event == RawSocketEvent.read) {
+          final datagram = socket.receive();
+          if (datagram != null) {
+            final response = utf8.decode(datagram.data);
+            _handleSsdpResponse(response, datagram.address.address);
+          }
+        }
+      });
+
+      // Keep SSDP socket alive for 5 seconds
+      Future.delayed(const Duration(seconds: 5), () {
+        socket.close();
+      });
+    } catch (e) {
+      debugPrint('ScannerNotifier: SSDP error — $e');
+    }
+  }
+
+  /// Parse an HTTP-like SSDP response and map to a [Device].
+  void _handleSsdpResponse(String response, String sourceIp) {
+    if (!response.contains('HTTP/1.1 200 OK')) return;
+
+    final lines = response.split('\r\n');
+    String server = '';
+    String location = '';
+
+    for (var line in lines) {
+      if (line.toUpperCase().startsWith('SERVER:')) {
+        server = line.substring(7).trim();
+      } else if (line.toUpperCase().startsWith('LOCATION:')) {
+        location = line.substring(9).trim();
+      }
+    }
+
+    if (location.isEmpty) return;
+
+    String deviceType = 'wifi';
+    String name = 'Unknown Device';
+    int port = 80; // default generic port
+    String ip = sourceIp;
+
+    // Roku devices typically broadcast Server: Roku UPnP/1.0
+    // and Location usually points to http://ip:8060/
+    if (server.toLowerCase().contains('roku') || location.contains(':8060')) {
+      deviceType = 'roku';
+      name = 'Roku Device';
+      port = 8060;
+    }
+    // Samsung Tizen usually broadcasts SEC_UDP or similar, and has port 8001 or 8002 in location
+    else if (server.toLowerCase().contains('samsung') ||
+        location.contains('samsung') ||
+        location.contains(':8001') ||
+        location.contains(':8002')) {
+      deviceType = 'samsung';
+      name = 'Samsung TV';
+      if (location.contains(':8002'))
+        port = 8002;
+      else if (location.contains(':8001'))
+        port = 8001;
+      else
+        port = 8002; // Default to secure websocket port for modern Samsung TVs
+    } else {
+      // Ignore other UPnP devices for now
+      return;
+    }
+
+    final existing = state.devices;
+    if (existing.any((d) => d.ip == ip && d.port == port)) return;
+
+    final device = Device(
+      id: '$ip:$port',
+      name: name,
+      type: deviceType,
+      model: 'SSDP Discovered',
+      signal: 100,
+      ip: ip,
+      port: port,
+    );
+
+    // Run safe state updates
+    state = state.copyWith(devices: [...existing, device]);
+    debugPrint(
+      'ScannerNotifier: Found device "$name" at $ip:$port ($deviceType) via SSDP',
     );
   }
 }

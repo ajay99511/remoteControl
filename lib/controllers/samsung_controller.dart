@@ -1,5 +1,7 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../models/remote_key.dart';
@@ -40,18 +42,42 @@ class SamsungController implements DeviceController {
   Future<void> connect() async {
     try {
       final nameBase64 = base64Encode(utf8.encode('FlutterRemote'));
-      final wsUrl = Uri.parse(
-        'ws://$host:$port/api/v2/channels/samsung.remote.control?name=$nameBase64',
-      );
 
+      try {
+        // Attempt 1: Modern WSS on port 8002 (Tizen 2016+)
+        final wssUrl = Uri.parse(
+          'wss://$host:8002/api/v2/channels/samsung.remote.control?name=$nameBase64',
+        );
+        final httpClient = HttpClient()
+          ..badCertificateCallback =
+              ((X509Certificate cert, String certHost, int certPort) => true);
+
+        final socket = await WebSocket.connect(
+          wssUrl.toString(),
+          customClient: httpClient,
+        ).timeout(const Duration(seconds: 3));
+        _channel = IOWebSocketChannel(socket);
+        _connected = true;
+        debugPrint('SamsungController: Connected to $host:8002 via wss');
+        return;
+      } catch (e) {
+        debugPrint(
+          'SamsungController: wss://8002 failed ($e), falling back to ws://8001',
+        );
+      }
+
+      // Attempt 2: Legacy WS on port 8001
+      final wsUrl = Uri.parse(
+        'ws://$host:8001/api/v2/channels/samsung.remote.control?name=$nameBase64',
+      );
       _channel = WebSocketChannel.connect(wsUrl);
-      // Wait for the connection to be established. Note that TVs may reject if not allowed.
-      await _channel!.ready.timeout(const Duration(seconds: 10));
+      await _channel!.ready.timeout(const Duration(seconds: 4));
+
       _connected = true;
-      debugPrint('SamsungController: Connected to $host:$port');
+      debugPrint('SamsungController: Connected to $host:8001 via ws');
     } catch (e) {
       _connected = false;
-      throw Exception('Samsung TV not reachable at $host:$port — $e');
+      throw Exception('Samsung TV not reachable at $host — $e');
     }
   }
 
