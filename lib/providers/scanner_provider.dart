@@ -241,9 +241,9 @@ class ScannerNotifier extends Notifier<ScannerState> {
         location.contains(':8002')) {
       deviceType = 'samsung';
       name = 'Samsung TV';
-      if (location.contains(':8002'))
+      if (location.contains(':8002')) {
         port = 8002;
-      else if (location.contains(':8001'))
+      } else if (location.contains(':8001'))
         port = 8001;
       else
         port = 8002; // Default to secure websocket port for modern Samsung TVs
