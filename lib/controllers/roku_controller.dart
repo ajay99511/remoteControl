@@ -39,6 +39,16 @@ class RokuController implements DeviceController {
     RemoteKey.fastForward: 'Fwd',
   };
 
+  /// Common Roku App IDs.
+  static const Map<String, String> _appIds = {
+    'netflix': '12',
+    'youtube': '837',
+    'prime video': '13',
+    'disney+': '291097',
+    'hulu': '2285',
+    'spotify': '22297',
+  };
+
   Uri _ecpUri(String path) => Uri.parse('http://$host:$port/$path');
 
   @override
@@ -67,9 +77,6 @@ class RokuController implements DeviceController {
   }
 
   @override
-  bool get isConnected => _connected;
-
-  @override
   Future<void> sendKey(RemoteKey key) async {
     if (!_connected) return;
     final ecpKey = _keyMap[key] ?? key.name;
@@ -93,4 +100,23 @@ class RokuController implements DeviceController {
       }
     }
   }
+
+  @override
+  Future<void> launchApp(String appName) async {
+    if (!_connected) return;
+    final appId = _appIds[appName.toLowerCase()];
+    if (appId == null) {
+      debugPrint('RokuController: App "$appName" not found in mapping.');
+      return;
+    }
+    try {
+      await _client.post(_ecpUri('launch/$appId'));
+      debugPrint('RokuController: Launched app $appName ($appId)');
+    } catch (e) {
+      debugPrint('RokuController: Failed to launch $appName — $e');
+    }
+  }
+
+  @override
+  bool get isConnected => _connected;
 }

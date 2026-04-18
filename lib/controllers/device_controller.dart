@@ -18,6 +18,9 @@ abstract class DeviceController {
   /// Send a text string to the device (e.g., for search input).
   Future<void> sendText(String text);
 
+  /// Launch a specific app on the device.
+  Future<void> launchApp(String appName);
+
   /// Whether the device is currently connected and reachable.
   bool get isConnected;
 }

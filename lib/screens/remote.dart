@@ -87,6 +87,11 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen>
     _keyboardFocus.unfocus();
   }
 
+  void _launchApp(String appName) {
+    ref.read(connectionProvider.notifier).launchApp(appName);
+    HapticFeedback.mediumImpact();
+  }
+
   @override
   Widget build(BuildContext context) {
     final connection = ref.watch(connectionProvider);
@@ -689,22 +694,22 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen>
                   AppButton(
                     name: 'Netflix',
                     color: const Color(0xFFE50914),
-                    onTap: () {},
+                    onTap: () => _launchApp('Netflix'),
                   ),
                   AppButton(
                     name: 'YouTube',
                     color: const Color(0xFFFF0000),
-                    onTap: () {},
+                    onTap: () => _launchApp('YouTube'),
                   ),
                   AppButton(
                     name: 'Prime Video',
                     color: const Color(0xFF00A8E1),
-                    onTap: () {},
+                    onTap: () => _launchApp('Prime Video'),
                   ),
                   AppButton(
                     name: 'Disney+',
                     color: const Color(0xFF113CCF),
-                    onTap: () {},
+                    onTap: () => _launchApp('Disney+'),
                   ),
                 ],
               )

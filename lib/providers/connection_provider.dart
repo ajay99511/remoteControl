@@ -103,6 +103,16 @@ class ConnectionNotifier extends Notifier<DeviceConnectionState> {
     }
   }
 
+  /// Launch a specific app on the connected device.
+  Future<void> launchApp(String appName) async {
+    if (state.controller == null || !state.controller!.isConnected) return;
+    try {
+      await state.controller!.launchApp(appName);
+    } catch (e) {
+      debugPrint('ConnectionNotifier: launchApp failed — $e');
+    }
+  }
+
   /// Factory method — instantiate the correct controller for the device type.
   DeviceController _buildController(Device device) {
     if (device.id.startsWith('mock-')) {

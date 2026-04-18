@@ -48,4 +48,13 @@ class MockController implements DeviceController {
     await Future.delayed(const Duration(milliseconds: 200));
     debugPrint('MockController ($deviceName): Received text input -> "$text"');
   }
+
+  @override
+  Future<void> launchApp(String appName) async {
+    if (!_connected) return;
+
+    // Simulate app launch latency
+    await Future.delayed(const Duration(milliseconds: 500));
+    debugPrint('MockController ($deviceName): Launched app -> $appName');
+  }
 }

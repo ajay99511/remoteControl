@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nsd/nsd.dart';
+import 'package:permission_handler/permission_handler.dart' hide ServiceStatus;
 
 import '../models/device.dart';
 
@@ -48,6 +49,18 @@ class ScannerNotifier extends Notifier<ScannerState> {
 
   /// Start scanning for devices on the local network.
   Future<void> startScan() async {
+    // Request permissions for local network discovery
+    if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
+      try {
+        final status = await Permission.nearbyWifiDevices.request();
+        if (status.isDenied) {
+          debugPrint('ScannerNotifier: Nearby WiFi permission denied');
+        }
+      } catch (e) {
+        debugPrint('ScannerNotifier: Error requesting permissions — $e');
+      }
+    }
+
     state = state.copyWith(isScanning: true, devices: [], error: null);
 
     // Service types that Roku and other smart devices advertise
@@ -68,7 +81,7 @@ class ScannerNotifier extends Notifier<ScannerState> {
         for (final type in serviceTypes) {
           final discovery = await startDiscovery(
             type,
-            ipLookupType: IpLookupType.any, // Use any as defined in nsd package
+            ipLookupType: IpLookupType.any,
           );
           _discoveries.add(discovery);
           discovery.addServiceListener((service, status) {
@@ -206,49 +219,52 @@ class ScannerNotifier extends Notifier<ScannerState> {
 
   /// Parse an HTTP-like SSDP response and map to a [Device].
   void _handleSsdpResponse(String response, String sourceIp) {
-    if (!response.contains('HTTP/1.1 200 OK')) return;
+    if (!response.toUpperCase().contains('HTTP/1.1 200 OK')) return;
 
     final lines = response.split('\r\n');
     String server = '';
     String location = '';
 
     for (var line in lines) {
-      if (line.toUpperCase().startsWith('SERVER:')) {
+      final upperLine = line.toUpperCase();
+      if (upperLine.startsWith('SERVER:')) {
         server = line.substring(7).trim();
-      } else if (line.toUpperCase().startsWith('LOCATION:')) {
+      } else if (upperLine.startsWith('LOCATION:')) {
         location = line.substring(9).trim();
       }
     }
 
-    if (location.isEmpty) return;
+    if (location.isEmpty) {
+      // Some SSDP responses might use different headers or formats
+      // but if we have the server info we might still be able to identify it.
+    }
 
     String deviceType = 'wifi';
     String name = 'Unknown Device';
-    int port = 80; // default generic port
+    int port = 80;
     String ip = sourceIp;
 
-    // Roku devices typically broadcast Server: Roku UPnP/1.0
-    // and Location usually points to http://ip:8060/
-    if (server.toLowerCase().contains('roku') || location.contains(':8060')) {
+    final lowerServer = server.toLowerCase();
+    final lowerLoc = location.toLowerCase();
+
+    if (lowerServer.contains('roku') || lowerLoc.contains(':8060')) {
       deviceType = 'roku';
       name = 'Roku Device';
       port = 8060;
-    }
-    // Samsung Tizen usually broadcasts SEC_UDP or similar, and has port 8001 or 8002 in location
-    else if (server.toLowerCase().contains('samsung') ||
-        location.contains('samsung') ||
-        location.contains(':8001') ||
-        location.contains(':8002')) {
+    } else if (lowerServer.contains('samsung') ||
+        lowerLoc.contains('samsung') ||
+        lowerLoc.contains(':8001') ||
+        lowerLoc.contains(':8002')) {
       deviceType = 'samsung';
       name = 'Samsung TV';
-      if (location.contains(':8002')) {
+      if (lowerLoc.contains(':8002')) {
         port = 8002;
-      } else if (location.contains(':8001'))
+      } else if (lowerLoc.contains(':8001')) {
         port = 8001;
-      else
-        port = 8002; // Default to secure websocket port for modern Samsung TVs
+      } else {
+        port = 8002;
+      }
     } else {
-      // Ignore other UPnP devices for now
       return;
     }
 
@@ -265,7 +281,6 @@ class ScannerNotifier extends Notifier<ScannerState> {
       port: port,
     );
 
-    // Run safe state updates
     state = state.copyWith(devices: [...existing, device]);
     debugPrint(
       'ScannerNotifier: Found device "$name" at $ip:$port ($deviceType) via SSDP',

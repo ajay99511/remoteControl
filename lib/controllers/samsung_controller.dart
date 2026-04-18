@@ -28,14 +28,24 @@ class SamsungController implements DeviceController {
     RemoteKey.select: 'KEY_ENTER',
     RemoteKey.back: 'KEY_RETURN',
     RemoteKey.home: 'KEY_HOME',
-    RemoteKey.playPause:
-        'KEY_PLAY', // Some TVs use KEY_PLAY/KEY_PAUSE separately
+    RemoteKey.playPause: 'KEY_PLAY',
     RemoteKey.volumeUp: 'KEY_VOLUP',
     RemoteKey.volumeDown: 'KEY_VOLDOWN',
     RemoteKey.mute: 'KEY_MUTE',
     RemoteKey.power: 'KEY_POWER',
     RemoteKey.rewind: 'KEY_REWIND',
     RemoteKey.fastForward: 'KEY_FF',
+  };
+
+  /// Common Samsung App IDs (Tizen).
+  static const Map<String, String> _appIds = {
+    'netflix': '11101200001',
+    'youtube': '111299001912',
+    'prime video': '3201512006785',
+    'disney+': '3201901017640',
+    'spotify': '3201608010191',
+    'hulu': '3201601007625',
+    'apple tv': '3201807016597',
   };
 
   @override
@@ -118,10 +128,54 @@ class SamsungController implements DeviceController {
 
   @override
   Future<void> sendText(String text) async {
-    // Currently Samsung text input is handled differently or not fully supported
-    // via this exact REST API without a specific input focus.
-    debugPrint(
-      'SamsungController: Text input not fully supported yet ($text).',
-    );
+    if (!_connected || _channel == null) return;
+
+    final textBase64 = base64Encode(utf8.encode(text));
+    final payload = {
+      "method": "ms.remote.control",
+      "params": {
+        "Cmd": textBase64,
+        "DataOfCmd": "base64",
+        "Option": "false",
+        "TypeOfRemote": "SendInputString",
+      },
+    };
+
+    try {
+      _channel!.sink.add(jsonEncode(payload));
+      debugPrint('SamsungController: Sent text input "$text"');
+    } catch (e) {
+      debugPrint('SamsungController: Failed to send text — $e');
+    }
+  }
+
+  @override
+  Future<void> launchApp(String appName) async {
+    if (!_connected || _channel == null) return;
+
+    final appId = _appIds[appName.toLowerCase()];
+    if (appId == null) {
+      debugPrint('SamsungController: App "$appName" not found in mapping.');
+      return;
+    }
+
+    final payload = {
+      "method": "ms.channel.emit",
+      "params": {
+        "event": "ed.apps.launch",
+        "to": "host",
+        "data": {
+          "appId": appId,
+          "action_type": "DEEP_LINK",
+        },
+      },
+    };
+
+    try {
+      _channel!.sink.add(jsonEncode(payload));
+      debugPrint('SamsungController: Launched app $appName ($appId)');
+    } catch (e) {
+      debugPrint('SamsungController: Failed to launch $appName — $e');
+    }
   }
 }
