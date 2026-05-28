@@ -1,20 +1,49 @@
 /// Enum representing all remote control keys that can be sent to a device.
-///
-/// Each key maps to a protocol-specific command string in the concrete
-/// controller implementations (e.g., RokuController maps [up] to 'Up').
 enum RemoteKey {
+  // Navigation
   up,
   down,
   left,
   right,
   select,
+  ok,
   back,
+  exit,
   home,
+  menu,
+  info,
+  guide,
+  search,
+  settings,
+
+  // Playback
   playPause,
+  rewind,
+  fastForward,
+  replay,
+  instantReplay,
+  record,
+
+  // Volume
   volumeUp,
   volumeDown,
   mute,
+
+  // Channels
+  channelUp,
+  channelDown,
+
+  // Input / Display
+  inputSource,
+  aspectRatio,
+  pip,
+  subtitles,
+  audioTrack,
+
+  // Power / System
   power,
-  rewind,
-  fastForward,
+  sleep,
+
+  // Roku-specific
+  star,
 }

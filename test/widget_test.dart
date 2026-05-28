@@ -1,30 +1,44 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-
 import 'package:devicecontroller/main.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
+  testWidgets('App smoke test - Scanner screen', (WidgetTester tester) async {
     // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+    await tester.pumpWidget(
+      const ProviderScope(
+        child: MyApp(),
+      ),
+    );
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    // Verify Discover title
+    expect(find.text('Discover'), findsOneWidget);
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
+    // Verify buttons
+    expect(find.text('Rescan'), findsOneWidget);
+    expect(find.text('Manual IP'), findsOneWidget);
+
+    // Tap Manual IP
+    await tester.tap(find.text('Manual IP'));
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500)); // Wait for dialog animation
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    // Verify dialog
+    expect(find.text('Connect via IP'), findsOneWidget);
+    expect(find.text('Cancel'), findsOneWidget);
+    expect(find.text('Connect'), findsOneWidget);
+
+    // Close dialog
+    await tester.tap(find.text('Cancel'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    // Wait for discovery timer (10s) and other async tasks
+    await tester.pump(const Duration(seconds: 11));
+
+    // Final pump to clear any remaining frame tasks
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(seconds: 1));
   });
 }

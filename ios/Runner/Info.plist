@@ -4,10 +4,22 @@
 <dict>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Universal Remote needs local network access to discover and control your smart TV.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_roku._tcp</string>
+		<string>_samsungtv._tcp</string>
+		<string>_smart-tv._tcp</string>
+		<string>_samsungbridge._tcp</string>
+		<string>_googlecast._tcp</string>
+		<string>_airplay._tcp</string>
+		<string>_http._tcp</string>
+	</array>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Devicecontroller</string>
+	<string>Universal Remote</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -15,7 +27,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>devicecontroller</string>
+	<string>universalremote</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>

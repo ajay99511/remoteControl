@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 class RemoteButton extends StatelessWidget {
   final IconData? icon;
   final String? label;
+  final String? tooltip;
   final VoidCallback onTap;
   final bool active;
   final double size;
@@ -14,6 +15,7 @@ class RemoteButton extends StatelessWidget {
     super.key,
     this.icon,
     this.label,
+    this.tooltip,
     required this.onTap,
     this.active = false,
     this.size = 56,
@@ -23,77 +25,84 @@ class RemoteButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: () {
-              HapticFeedback.lightImpact();
-              onTap();
-            },
-            borderRadius: BorderRadius.circular(size / 2),
-            splashColor: (activeColor ?? Colors.indigoAccent).withValues(
-              alpha: 0.2,
-            ),
-            highlightColor: Colors.white.withValues(alpha: 0.05),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              width: size,
-              height: size,
-              decoration: BoxDecoration(
-                color: active
-                    ? (activeColor ?? const Color(0xFF27272A))
-                    : Colors.white.withValues(alpha: 0.03),
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: active
-                      ? (activeColor?.withValues(alpha: 0.6) ??
-                            Colors.white.withValues(alpha: 0.2))
-                      : Colors.white.withValues(alpha: 0.05),
-                  width: 1,
+    return Semantics(
+      label: label ?? tooltip ?? 'Remote button',
+      button: true,
+      child: Tooltip(
+        message: tooltip ?? label ?? '',
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () {
+                  HapticFeedback.lightImpact();
+                  onTap();
+                },
+                borderRadius: BorderRadius.circular(size / 2),
+                splashColor: (activeColor ?? Colors.indigoAccent).withValues(
+                  alpha: 0.2,
                 ),
-                boxShadow: [
-                  if (active)
-                    BoxShadow(
-                      color: (activeColor ?? Colors.white).withValues(
-                        alpha: 0.3,
-                      ),
-                      blurRadius: 10,
-                      spreadRadius: 1,
-                    )
-                  else
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.4),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
+                highlightColor: Colors.white.withValues(alpha: 0.05),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  width: size,
+                  height: size,
+                  decoration: BoxDecoration(
+                    color: active
+                        ? (activeColor ?? const Color(0xFF27272A))
+                        : Colors.white.withValues(alpha: 0.03),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: active
+                          ? (activeColor?.withValues(alpha: 0.6) ??
+                                Colors.white.withValues(alpha: 0.2))
+                          : Colors.white.withValues(alpha: 0.05),
+                      width: 1,
                     ),
-                ],
-              ),
-              child: Center(
-                child: Icon(
-                  icon,
-                  color: active ? Colors.white : (color ?? Colors.white70),
-                  size: size * 0.4,
+                    boxShadow: [
+                      if (active)
+                        BoxShadow(
+                          color: (activeColor ?? Colors.white).withValues(
+                            alpha: 0.3,
+                          ),
+                          blurRadius: 10,
+                          spreadRadius: 1,
+                        )
+                      else
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.4),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                    ],
+                  ),
+                  child: Center(
+                    child: Icon(
+                      icon,
+                      color: active ? Colors.white : (color ?? Colors.white70),
+                      size: size * 0.4,
+                    ),
+                  ),
                 ),
               ),
             ),
-          ),
+            if (label != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                label!,
+                style: const TextStyle(
+                  color: Color(0xFF71717A), // zinc-500
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 1.0,
+                ),
+              ),
+            ],
+          ],
         ),
-        if (label != null) ...[
-          const SizedBox(height: 8),
-          Text(
-            label!,
-            style: const TextStyle(
-              color: Color(0xFF71717A), // zinc-500
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 1.0,
-            ),
-          ),
-        ],
-      ],
+      ),
     );
   }
 }
@@ -140,17 +149,21 @@ class RockerButton extends StatelessWidget {
       child: Column(
         children: [
           Expanded(
-            child: InkWell(
-              onTap: () {
-                HapticFeedback.lightImpact();
-                onUp();
-              },
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(32),
-              ),
-              splashColor: Colors.indigoAccent.withValues(alpha: 0.2),
-              child: Center(
-                child: Icon(iconUp, color: Colors.white70, size: 24),
+            child: Semantics(
+              label: '$label up',
+              button: true,
+              child: InkWell(
+                onTap: () {
+                  HapticFeedback.lightImpact();
+                  onUp();
+                },
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(32),
+                ),
+                splashColor: Colors.indigoAccent.withValues(alpha: 0.2),
+                child: Center(
+                  child: Icon(iconUp, color: Colors.white70, size: 24),
+                ),
               ),
             ),
           ),
@@ -164,17 +177,21 @@ class RockerButton extends StatelessWidget {
             ),
           ),
           Expanded(
-            child: InkWell(
-              onTap: () {
-                HapticFeedback.lightImpact();
-                onDown();
-              },
-              borderRadius: const BorderRadius.vertical(
-                bottom: Radius.circular(32),
-              ),
-              splashColor: Colors.indigoAccent.withValues(alpha: 0.2),
-              child: Center(
-                child: Icon(iconDown, color: Colors.white70, size: 24),
+            child: Semantics(
+              label: '$label down',
+              button: true,
+              child: InkWell(
+                onTap: () {
+                  HapticFeedback.lightImpact();
+                  onDown();
+                },
+                borderRadius: const BorderRadius.vertical(
+                  bottom: Radius.circular(32),
+                ),
+                splashColor: Colors.indigoAccent.withValues(alpha: 0.2),
+                child: Center(
+                  child: Icon(iconDown, color: Colors.white70, size: 24),
+                ),
               ),
             ),
           ),
@@ -198,40 +215,44 @@ class AppButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.white.withValues(alpha: 0.03),
-      borderRadius: BorderRadius.circular(16),
-      child: InkWell(
-        onTap: () {
-          HapticFeedback.mediumImpact();
-          onTap();
-        },
+    return Semantics(
+      label: 'Launch $name',
+      button: true,
+      child: Material(
+        color: Colors.white.withValues(alpha: 0.03),
         borderRadius: BorderRadius.circular(16),
-        splashColor: color.withValues(alpha: 0.2),
-        highlightColor: color.withValues(alpha: 0.05),
-        child: Container(
-          decoration: BoxDecoration(
-            border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.2),
-                blurRadius: 8,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          alignment: Alignment.center,
-          child: Text(
-            name,
-            style: TextStyle(
-              color: color,
-              fontWeight: FontWeight.bold,
-              fontSize: 15,
-              letterSpacing: 0.5,
-              shadows: [
-                Shadow(color: color.withValues(alpha: 0.5), blurRadius: 10),
+        child: InkWell(
+          onTap: () {
+            HapticFeedback.mediumImpact();
+            onTap();
+          },
+          borderRadius: BorderRadius.circular(16),
+          splashColor: color.withValues(alpha: 0.2),
+          highlightColor: color.withValues(alpha: 0.05),
+          child: Container(
+            decoration: BoxDecoration(
+              border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.2),
+                  blurRadius: 8,
+                  offset: const Offset(0, 4),
+                ),
               ],
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              name,
+              style: TextStyle(
+                color: color,
+                fontWeight: FontWeight.bold,
+                fontSize: 15,
+                letterSpacing: 0.5,
+                shadows: [
+                  Shadow(color: color.withValues(alpha: 0.5), blurRadius: 10),
+                ],
+              ),
             ),
           ),
         ),

@@ -1,3 +1,4 @@
+import '../models/app_id.dart';
 import '../models/remote_key.dart';
 
 /// Abstract interface for controlling a smart device.
@@ -19,7 +20,7 @@ abstract class DeviceController {
   Future<void> sendText(String text);
 
   /// Launch a specific app on the device.
-  Future<void> launchApp(String appName);
+  Future<void> launchApp(AppId appId);
 
   /// Whether the device is currently connected and reachable.
   bool get isConnected;

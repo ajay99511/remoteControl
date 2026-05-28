@@ -1,4 +1,5 @@
-import 'package:flutter/foundation.dart';
+import '../core/app_logger.dart';
+import '../models/app_id.dart';
 import '../models/remote_key.dart';
 import 'device_controller.dart';
 
@@ -15,13 +16,13 @@ class MockController implements DeviceController {
     // Simulate connection delay
     await Future.delayed(const Duration(milliseconds: 1500));
     _connected = true;
-    debugPrint('MockController: Successfully connected to $deviceName');
+    log.d('MockController: Successfully connected to $deviceName');
   }
 
   @override
   Future<void> disconnect() async {
     _connected = false;
-    debugPrint('MockController: Disconnected from $deviceName');
+    log.d('MockController: Disconnected from $deviceName');
   }
 
   @override
@@ -35,9 +36,7 @@ class MockController implements DeviceController {
     await Future.delayed(const Duration(milliseconds: 100));
 
     // Log the interaction instead of throwing network errors
-    debugPrint(
-      'MockController ($deviceName): Received remote key -> ${key.name}',
-    );
+    log.d('MockController ($deviceName): Received remote key -> ${key.name}');
   }
 
   @override
@@ -46,15 +45,15 @@ class MockController implements DeviceController {
 
     // Simulate text input latency
     await Future.delayed(const Duration(milliseconds: 200));
-    debugPrint('MockController ($deviceName): Received text input -> "$text"');
+    log.d('MockController ($deviceName): Received text input -> "$text"');
   }
 
   @override
-  Future<void> launchApp(String appName) async {
+  Future<void> launchApp(AppId appId) async {
     if (!_connected) return;
 
     // Simulate app launch latency
     await Future.delayed(const Duration(milliseconds: 500));
-    debugPrint('MockController ($deviceName): Launched app -> $appName');
+    log.d('MockController ($deviceName): Launched app -> ${appId.displayName}');
   }
 }

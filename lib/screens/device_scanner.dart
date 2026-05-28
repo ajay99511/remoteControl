@@ -31,73 +31,165 @@ class _DeviceScannerScreenState extends ConsumerState<DeviceScannerScreen> {
       context: context,
       builder: (context) {
         final TextEditingController ipController = TextEditingController();
-        return AlertDialog(
-          backgroundColor: const Color(0xFF18181B),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          title: const Text(
-            'Connect via IP',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-          ),
-          content: TextField(
-            controller: ipController,
-            style: const TextStyle(color: Colors.white),
-            decoration: InputDecoration(
-              hintText: 'e.g., 192.168.1.105',
-              hintStyle: const TextStyle(color: Colors.grey),
-              filled: true,
-              fillColor: Colors.black.withValues(alpha: 0.2),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide.none,
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(
-                  color: Colors.indigoAccent,
-                  width: 2,
-                ),
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.indigoAccent,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              onPressed: () {
-                if (ipController.text.isNotEmpty) {
-                  Navigator.pop(context);
-                  final device = Device(
-                    id: 'manual-${DateTime.now().millisecondsSinceEpoch}',
-                    name: 'Manual Connection',
-                    type: 'roku',
-                    model: 'Custom IP',
-                    signal: 100,
-                    ip: ipController.text,
-                    port: 8060,
-                  );
-                  ref.read(connectionProvider.notifier).connect(device);
-                }
-              },
-              child: const Text(
-                'Connect',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ],
+        DeviceType selectedType = DeviceType.roku;
+        int selectedPort = 8060;
+        String? ipError;
+
+        final defaultPorts = {
+          DeviceType.roku: 8060,
+          DeviceType.samsung: 8001,
+          DeviceType.lg: 3000,
+          DeviceType.vizio: 7345,
+        };
+
+        final ipRegex = RegExp(
+          r'^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}$' // IPv4
+          r'|^([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$', // IPv6
         );
+
+        return StatefulBuilder(builder: (context, setDialogState) {
+          return AlertDialog(
+            backgroundColor: const Color(0xFF18181B),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            title: const Text(
+              'Connect via IP',
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text(
+                    'Device Type',
+                    style: TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<DeviceType>(
+                        value: selectedType,
+                        dropdownColor: const Color(0xFF18181B),
+                        style: const TextStyle(color: Colors.white),
+                        isExpanded: true,
+                        items: [
+                          DeviceType.roku,
+                          DeviceType.samsung,
+                          DeviceType.lg,
+                          DeviceType.vizio
+                        ].map((t) {
+                          return DropdownMenuItem(
+                            value: t,
+                            child: Text(t.name.toUpperCase()),
+                          );
+                        }).toList(),
+                        onChanged: (t) {
+                          if (t != null) {
+                            setDialogState(() {
+                              selectedType = t;
+                              selectedPort = defaultPorts[t] ?? 80;
+                            });
+                          }
+                        },
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'IP Address',
+                    style: TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: ipController,
+                    style: const TextStyle(color: Colors.white),
+                    onChanged: (v) {
+                      setDialogState(() {
+                        ipError = ipRegex.hasMatch(v) ? null : 'Invalid IP address';
+                      });
+                    },
+                    decoration: InputDecoration(
+                      hintText: 'e.g., 192.168.1.105',
+                      hintStyle: const TextStyle(color: Colors.grey),
+                      errorText: ipError,
+                      filled: true,
+                      fillColor: Colors.black.withValues(alpha: 0.2),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Port',
+                    style: TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: TextEditingController(text: '$selectedPort'),
+                    style: const TextStyle(color: Colors.white),
+                    keyboardType: TextInputType.number,
+                    onChanged: (v) {
+                      selectedPort = int.tryParse(v) ?? selectedPort;
+                    },
+                    decoration: InputDecoration(
+                      filled: true,
+                      fillColor: Colors.black.withValues(alpha: 0.2),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.indigoAccent,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                onPressed: (ipError == null && ipController.text.isNotEmpty)
+                    ? () {
+                        Navigator.pop(context);
+                        final device = Device(
+                          id: 'manual-${DateTime.now().millisecondsSinceEpoch}',
+                          name: 'Manual ${selectedType.name.toUpperCase()}',
+                          type: selectedType,
+                          model: 'Custom IP',
+                          signal: 100,
+                          ip: ipController.text,
+                          port: selectedPort,
+                        );
+                        ref.read(connectionProvider.notifier).connect(device);
+                      }
+                    : null,
+                child: const Text(
+                  'Connect',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          );
+        });
       },
     );
   }
@@ -130,44 +222,46 @@ class _DeviceScannerScreenState extends ConsumerState<DeviceScannerScreen> {
           Positioned(
             top: -100,
             left: -100,
-            child:
-                Container(
-                      width: 300,
-                      height: 300,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Colors.indigoAccent.withValues(alpha: 0.15),
-                      ),
-                    )
-                    .animate(
-                      onPlay: (controller) => controller.repeat(reverse: true),
-                    )
-                    .scale(
-                      duration: 4.seconds,
-                      begin: const Offset(1, 1),
-                      end: const Offset(1.2, 1.2),
-                    ),
+            child: Container(
+              width: 300,
+              height: 300,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.indigoAccent.withValues(alpha: 0.15),
+              ),
+            ),
+            /*
+            .animate(
+              onPlay: (controller) => controller.repeat(reverse: true),
+            )
+            .scale(
+              duration: 4.seconds,
+              begin: const Offset(1, 1),
+              end: const Offset(1.2, 1.2),
+            ),
+            */
           ),
           Positioned(
             bottom: -50,
             right: -50,
-            child:
-                Container(
-                      width: 250,
-                      height: 250,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Colors.purpleAccent.withValues(alpha: 0.15),
-                      ),
-                    )
-                    .animate(
-                      onPlay: (controller) => controller.repeat(reverse: true),
-                    )
-                    .scale(
-                      duration: 5.seconds,
-                      begin: const Offset(1, 1),
-                      end: const Offset(1.3, 1.3),
-                    ),
+            child: Container(
+              width: 250,
+              height: 250,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.purpleAccent.withValues(alpha: 0.15),
+              ),
+            ),
+            /*
+            .animate(
+              onPlay: (controller) => controller.repeat(reverse: true),
+            )
+            .scale(
+              duration: 5.seconds,
+              begin: const Offset(1, 1),
+              end: const Offset(1.3, 1.3),
+            ),
+            */
           ),
           // Blur Layer
           BackdropFilter(
@@ -186,15 +280,15 @@ class _DeviceScannerScreenState extends ConsumerState<DeviceScannerScreen> {
                 children: [
                   const SizedBox(height: 32),
                   const Text(
-                        'Discover',
-                        style: TextStyle(
-                          fontSize: 40,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
-                          letterSpacing: -1,
-                        ),
-                        textAlign: TextAlign.center,
-                      )
+                    'Discover',
+                    style: TextStyle(
+                      fontSize: 40,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                      letterSpacing: -1,
+                    ),
+                    textAlign: TextAlign.center,
+                  )
                       .animate()
                       .fadeIn(duration: 500.ms)
                       .moveY(begin: -20, end: 0),
@@ -203,8 +297,8 @@ class _DeviceScannerScreenState extends ConsumerState<DeviceScannerScreen> {
                     scanner.isScanning
                         ? 'Looking for nearby smart devices...'
                         : scanner.devices.isEmpty
-                        ? 'No devices found'
-                        : '\${scanner.devices.length} nearby device(s) found',
+                            ? 'No devices found'
+                            : '${scanner.devices.length} nearby device(s) found',
                     style: TextStyle(
                       color: Colors.white.withValues(alpha: 0.6),
                       fontSize: 16,
@@ -230,40 +324,40 @@ class _DeviceScannerScreenState extends ConsumerState<DeviceScannerScreen> {
                   ),
                   if (connection.status == ConnectionStatus.connecting)
                     Container(
-                          margin: const EdgeInsets.only(top: 24),
-                          padding: const EdgeInsets.symmetric(
-                            vertical: 16,
-                            horizontal: 24,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.05),
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.1),
+                      margin: const EdgeInsets.only(top: 24),
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 16,
+                        horizontal: 24,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.05),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.1),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.indigoAccent,
                             ),
                           ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.indigoAccent,
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              const Text(
-                                'Connecting to device...',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
+                          const SizedBox(width: 16),
+                          const Text(
+                            'Connecting to device...',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
-                        )
+                        ],
+                      ),
+                    )
                         .animate()
                         .fadeIn(duration: 300.ms)
                         .slideY(begin: 0.2, end: 0),
@@ -286,16 +380,16 @@ class _DeviceScannerScreenState extends ConsumerState<DeviceScannerScreen> {
             alignment: Alignment.center,
             children: [
               Container(
-                    width: 120,
-                    height: 120,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: Colors.indigoAccent.withValues(alpha: 0.3),
-                        width: 2,
-                      ),
-                    ),
-                  )
+                width: 120,
+                height: 120,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: Colors.indigoAccent.withValues(alpha: 0.3),
+                    width: 2,
+                  ),
+                ),
+              )
                   .animate(onPlay: (controller) => controller.repeat())
                   .scale(
                     duration: 2.seconds,
@@ -304,16 +398,16 @@ class _DeviceScannerScreenState extends ConsumerState<DeviceScannerScreen> {
                   )
                   .fadeOut(duration: 2.seconds),
               Container(
-                    width: 120,
-                    height: 120,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: Colors.purpleAccent.withValues(alpha: 0.3),
-                        width: 2,
-                      ),
-                    ),
-                  )
+                width: 120,
+                height: 120,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: Colors.purpleAccent.withValues(alpha: 0.3),
+                    width: 2,
+                  ),
+                ),
+              )
                   .animate(
                     onPlay: (controller) => controller.repeat(),
                     delay: 600.ms,
@@ -358,14 +452,14 @@ class _DeviceScannerScreenState extends ConsumerState<DeviceScannerScreen> {
           ),
           const SizedBox(height: 40),
           const Text(
-                'Scanning Network...',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white70,
-                  letterSpacing: 2.0,
-                ),
-              )
+            'Scanning Network...',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: Colors.white70,
+              letterSpacing: 2.0,
+            ),
+          )
               .animate(onPlay: (controller) => controller.repeat(reverse: true))
               .fadeIn(duration: 1.seconds)
               .fadeOut(duration: 1.seconds),
@@ -397,7 +491,7 @@ class _DeviceScannerScreenState extends ConsumerState<DeviceScannerScreen> {
                       ),
                       const SizedBox(height: 24),
                       Text(
-                        'No devices found.\\nEnsure you share the same Wi-Fi network.',
+                        'No devices found.\nEnsure you share the same Wi-Fi network.',
                         style: TextStyle(
                           color: Colors.white.withValues(alpha: 0.5),
                           fontSize: 16,
@@ -552,27 +646,43 @@ class _DeviceScannerScreenState extends ConsumerState<DeviceScannerScreen> {
     );
   }
 
-  IconData _deviceIcon(String type) {
+  IconData _deviceIcon(DeviceType type) {
     switch (type) {
-      case 'roku':
+      case DeviceType.roku:
         return LucideIcons.tv2;
-      case 'chromecast':
+      case DeviceType.samsung:
+        return LucideIcons.monitor;
+      case DeviceType.lg:
+        return LucideIcons.monitorDot;
+      case DeviceType.vizio:
+        return LucideIcons.monitorPlay;
+      case DeviceType.googleTv:
         return LucideIcons.cast;
-      case 'airplay':
-        return LucideIcons.airplay;
-      default:
+      case DeviceType.fireTv:
+        return LucideIcons.flame;
+      case DeviceType.ir:
+        return LucideIcons.activity;
+      case DeviceType.unknown:
         return LucideIcons.monitorSmartphone;
     }
   }
 
-  Color _deviceColor(String type) {
+  Color _deviceColor(DeviceType type) {
     switch (type) {
-      case 'roku':
+      case DeviceType.roku:
         return const Color(0xFF9D64FF);
-      case 'chromecast':
+      case DeviceType.samsung:
+        return const Color(0xFF1428A0);
+      case DeviceType.lg:
+        return const Color(0xFFA50034);
+      case DeviceType.vizio:
+        return const Color(0xFFFBB03B);
+      case DeviceType.googleTv:
         return const Color(0xFF4285F4);
-      case 'airplay':
-        return const Color(0xFF00C7FF);
+      case DeviceType.fireTv:
+        return const Color(0xFFFF9900);
+      case DeviceType.ir:
+        return Colors.green;
       default:
         return Colors.indigoAccent;
     }

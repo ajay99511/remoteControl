@@ -5,6 +5,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 
+import '../models/app_id.dart';
 import '../models/device.dart';
 import '../models/remote_key.dart';
 import '../providers/connection_provider.dart';
@@ -26,13 +27,16 @@ class RemoteScreen extends ConsumerStatefulWidget {
 
 class _RemoteScreenState extends ConsumerState<RemoteScreen>
     with SingleTickerProviderStateMixin {
-  bool isPowerOn = true;
   int activeTab = 0; // 0: Nav, 1: Touch, 2: Numpad
   bool showKeyboard = false;
   final TextEditingController _keyboardController = TextEditingController();
   final FocusNode _keyboardFocus = FocusNode();
 
   late TabController _tabController;
+
+  // Touchpad state (Requirement 2.24)
+  Offset _touchpadDelta = Offset.zero;
+  RemoteKey? _pendingDirection;
 
   @override
   void initState() {
@@ -59,9 +63,9 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen>
     HapticFeedback.lightImpact();
   }
 
-  void _togglePower() {
+  void _sendPower() {
+    // Fire-and-forget, no local state tracking (Requirement 2.25)
     _sendKey(RemoteKey.power);
-    setState(() => isPowerOn = !isPowerOn);
     HapticFeedback.mediumImpact();
   }
 
@@ -87,8 +91,8 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen>
     _keyboardFocus.unfocus();
   }
 
-  void _launchApp(String appName) {
-    ref.read(connectionProvider.notifier).launchApp(appName);
+  void _launchApp(AppId appId) {
+    ref.read(connectionProvider.notifier).launchApp(appId);
     HapticFeedback.mediumImpact();
   }
 
@@ -126,8 +130,9 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen>
               ),
             ),
           ),
+          // BackdropFilter sigma reduced to 15 (Requirement 2.30)
           BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 80, sigmaY: 80),
+            filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
             child: Container(color: Colors.transparent),
           ),
           // Content
@@ -173,6 +178,7 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen>
               border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
             ),
             child: IconButton(
+              tooltip: 'Back to Discovery',
               icon: const Icon(LucideIcons.arrowLeft, color: Colors.white70),
               onPressed: widget.onDisconnect,
             ),
@@ -239,21 +245,14 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen>
               color: Colors.white.withValues(alpha: 0.05),
               shape: BoxShape.circle,
               border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
-              boxShadow: isPowerOn
-                  ? []
-                  : [
-                      BoxShadow(
-                        color: Colors.redAccent.withValues(alpha: 0.2),
-                        blurRadius: 10,
-                      ),
-                    ],
             ),
             child: IconButton(
-              icon: Icon(
+              tooltip: 'Power Off',
+              icon: const Icon(
                 LucideIcons.power,
-                color: isPowerOn ? Colors.redAccent : Colors.white70,
+                color: Colors.redAccent,
               ),
-              onPressed: _togglePower,
+              onPressed: _sendPower,
             ),
           ),
         ],
@@ -333,6 +332,7 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen>
                           RemoteKey.up,
                           LucideIcons.chevronUp,
                           const EdgeInsets.only(top: 16),
+                          'Up',
                         ),
                       ),
                       Align(
@@ -341,6 +341,7 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen>
                           RemoteKey.down,
                           LucideIcons.chevronDown,
                           const EdgeInsets.only(bottom: 16),
+                          'Down',
                         ),
                       ),
                       Align(
@@ -349,6 +350,7 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen>
                           RemoteKey.left,
                           LucideIcons.chevronLeft,
                           const EdgeInsets.only(left: 16),
+                          'Left',
                         ),
                       ),
                       Align(
@@ -357,55 +359,60 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen>
                           RemoteKey.right,
                           LucideIcons.chevronRight,
                           const EdgeInsets.only(right: 16),
+                          'Right',
                         ),
                       ),
-                      // OK Button
+                      // OK Button (Requirement 2.28)
                       Center(
-                        child: Material(
-                          color: Colors.transparent,
-                          shape: const CircleBorder(),
-                          child: InkWell(
-                            onTap: () => _sendKey(RemoteKey.select),
-                            customBorder: const CircleBorder(),
-                            splashColor: Colors.indigoAccent.withValues(
-                              alpha: 0.3,
-                            ),
-                            highlightColor: Colors.indigoAccent.withValues(
-                              alpha: 0.1,
-                            ),
-                            child: Container(
-                              width: 88,
-                              height: 88,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                gradient: const LinearGradient(
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                  colors: [
-                                    Color(0xFF27272A),
-                                    Color(0xFF18181B),
+                        child: Semantics(
+                          label: 'OK — confirm selection',
+                          button: true,
+                          child: Material(
+                            color: Colors.transparent,
+                            shape: const CircleBorder(),
+                            child: InkWell(
+                              onTap: () => _sendKey(RemoteKey.select),
+                              customBorder: const CircleBorder(),
+                              splashColor: Colors.indigoAccent.withValues(
+                                alpha: 0.3,
+                              ),
+                              highlightColor: Colors.indigoAccent.withValues(
+                                alpha: 0.1,
+                              ),
+                              child: Container(
+                                width: 88,
+                                height: 88,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  gradient: const LinearGradient(
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                    colors: [
+                                      Color(0xFF27272A),
+                                      Color(0xFF18181B),
+                                    ],
+                                  ),
+                                  border: Border.all(
+                                    color: Colors.white.withValues(alpha: 0.1),
+                                    width: 1.5,
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(alpha: 0.5),
+                                      blurRadius: 10,
+                                      offset: const Offset(0, 5),
+                                    ),
                                   ],
                                 ),
-                                border: Border.all(
-                                  color: Colors.white.withValues(alpha: 0.1),
-                                  width: 1.5,
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.5),
-                                    blurRadius: 10,
-                                    offset: const Offset(0, 5),
-                                  ),
-                                ],
-                              ),
-                              child: const Center(
-                                child: Text(
-                                  'OK',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
-                                    letterSpacing: 1.5,
+                                child: const Center(
+                                  child: Text(
+                                    'OK',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                      letterSpacing: 1.5,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -431,6 +438,7 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen>
                     icon: LucideIcons.arrowLeft,
                     label: 'BACK',
                     onTap: () => _sendKey(RemoteKey.back),
+                    tooltip: 'Back',
                   ),
                   RemoteButton(
                     icon: LucideIcons.home,
@@ -438,11 +446,13 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen>
                     onTap: () => _sendKey(RemoteKey.home),
                     activeColor: Colors.purpleAccent,
                     active: true,
+                    tooltip: 'Home',
                   ),
                   RemoteButton(
                     icon: LucideIcons.playCircle,
                     label: 'PLAY',
                     onTap: () => _sendKey(RemoteKey.playPause),
+                    tooltip: 'Play or Pause',
                   ),
                 ],
               )
@@ -466,22 +476,24 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen>
                   Column(
                     children: [
                       RemoteButton(
-                        icon: LucideIcons.rewind,
-                        onTap: () => _sendKey(RemoteKey.rewind),
+                        icon: LucideIcons.chevronUp,
+                        onTap: () => _sendKey(RemoteKey.channelUp),
+                        tooltip: 'Channel Up',
                       ),
                       const SizedBox(height: 16),
                       RemoteButton(
-                        icon: LucideIcons.fastForward,
-                        onTap: () => _sendKey(RemoteKey.fastForward),
+                        icon: LucideIcons.chevronDown,
+                        onTap: () => _sendKey(RemoteKey.channelDown),
+                        tooltip: 'Channel Down',
                       ),
                     ],
                   ),
-                  RockerButton(
+                  // Standalone MUTE button (Requirement 2.26)
+                  RemoteButton(
+                    icon: LucideIcons.volumeX,
                     label: 'MUTE',
-                    iconUp: LucideIcons.volume2,
-                    iconDown: LucideIcons.volumeX,
-                    onUp: () => _sendKey(RemoteKey.volumeUp),
-                    onDown: () => _sendKey(RemoteKey.mute),
+                    onTap: () => _sendKey(RemoteKey.mute),
+                    tooltip: 'Mute',
                   ),
                 ],
               )
@@ -494,15 +506,20 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen>
     );
   }
 
-  Widget _buildDPadSegment(RemoteKey key, IconData icon, EdgeInsets padding) {
-    return Padding(
-      padding: padding,
-      child: IconButton(
-        iconSize: 28,
-        icon: Icon(icon, color: Colors.white70),
-        splashColor: Colors.indigoAccent.withValues(alpha: 0.3),
-        highlightColor: Colors.indigoAccent.withValues(alpha: 0.1),
-        onPressed: () => _sendKey(key),
+  Widget _buildDPadSegment(RemoteKey key, IconData icon, EdgeInsets padding, String label) {
+    return Semantics(
+      label: label,
+      button: true,
+      child: Padding(
+        padding: padding,
+        child: IconButton(
+          tooltip: label,
+          iconSize: 28,
+          icon: Icon(icon, color: Colors.white70),
+          splashColor: Colors.indigoAccent.withValues(alpha: 0.3),
+          highlightColor: Colors.indigoAccent.withValues(alpha: 0.1),
+          onPressed: () => _sendKey(key),
+        ),
       ),
     );
   }
@@ -516,7 +533,7 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen>
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(32),
                   child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                    filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
                     child: Container(
                       decoration: BoxDecoration(
                         color: Colors.white.withValues(alpha: 0.03),
@@ -535,10 +552,24 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen>
                       child: Stack(
                         children: [
                           Center(
-                                child: Icon(
-                                  LucideIcons.mousePointer2,
-                                  size: 80,
-                                  color: Colors.white.withValues(alpha: 0.1),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      _pendingDirection == RemoteKey.up ? LucideIcons.chevronUp :
+                                      _pendingDirection == RemoteKey.down ? LucideIcons.chevronDown :
+                                      _pendingDirection == RemoteKey.left ? LucideIcons.chevronLeft :
+                                      _pendingDirection == RemoteKey.right ? LucideIcons.chevronRight :
+                                      LucideIcons.mousePointer2,
+                                      size: 80,
+                                      color: _pendingDirection != null ? Colors.indigoAccent : Colors.white.withValues(alpha: 0.1),
+                                    ),
+                                    if (_pendingDirection != null)
+                                      Text(
+                                        _pendingDirection!.name.toUpperCase(),
+                                        style: const TextStyle(color: Colors.indigoAccent, fontWeight: FontWeight.bold),
+                                      ).animate().fadeIn(),
+                                  ],
                                 ),
                               )
                               .animate(
@@ -562,21 +593,29 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen>
                             ),
                           ),
                           GestureDetector(
+                            // Delta accumulation touchpad (Requirement 2.24)
+                            onPanUpdate: (details) {
+                              setState(() {
+                                _touchpadDelta += details.delta;
+                                final dx = _touchpadDelta.dx.abs();
+                                final dy = _touchpadDelta.dy.abs();
+                                if (dx > 30 || dy > 30) {
+                                  if (dx > dy) {
+                                    _pendingDirection = _touchpadDelta.dx > 0 ? RemoteKey.right : RemoteKey.left;
+                                  } else {
+                                    _pendingDirection = _touchpadDelta.dy > 0 ? RemoteKey.down : RemoteKey.up;
+                                  }
+                                }
+                              });
+                            },
                             onPanEnd: (details) {
-                              final velocity = details.velocity.pixelsPerSecond;
-                              if (velocity.dx.abs() > velocity.dy.abs()) {
-                                if (velocity.dx > 0) {
-                                  _sendKey(RemoteKey.right);
-                                } else {
-                                  _sendKey(RemoteKey.left);
-                                }
-                              } else {
-                                if (velocity.dy > 0) {
-                                  _sendKey(RemoteKey.down);
-                                } else {
-                                  _sendKey(RemoteKey.up);
-                                }
+                              if (_pendingDirection != null) {
+                                _sendKey(_pendingDirection!);
                               }
+                              setState(() {
+                                _touchpadDelta = Offset.zero;
+                                _pendingDirection = null;
+                              });
                             },
                             onTap: () => _sendKey(RemoteKey.select),
                             child: Container(color: Colors.transparent),
@@ -598,6 +637,7 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen>
                     icon: LucideIcons.arrowLeft,
                     label: 'BACK',
                     onTap: () => _sendKey(RemoteKey.back),
+                    tooltip: 'Back',
                   ),
                   RemoteButton(
                     icon: LucideIcons.home,
@@ -605,11 +645,13 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen>
                     onTap: () => _sendKey(RemoteKey.home),
                     activeColor: Colors.purpleAccent,
                     active: true,
+                    tooltip: 'Home',
                   ),
                   RemoteButton(
                     icon: LucideIcons.playCircle,
                     label: 'PLAY',
                     onTap: () => _sendKey(RemoteKey.playPause),
+                    tooltip: 'Play or Pause',
                   ),
                 ],
               )
@@ -641,42 +683,46 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen>
             itemBuilder: (context, index) {
               final num = nums[index];
               if (num.isEmpty) return const SizedBox();
-              return Material(
-                    color: Colors.white.withValues(alpha: 0.03),
-                    borderRadius: BorderRadius.circular(20),
-                    child: InkWell(
-                      onTap: () {
-                        ref.read(connectionProvider.notifier).sendText(num);
-                        HapticFeedback.lightImpact();
-                      },
+              return Semantics(
+                label: 'Number $num',
+                button: true,
+                child: Material(
+                      color: Colors.white.withValues(alpha: 0.03),
                       borderRadius: BorderRadius.circular(20),
-                      splashColor: Colors.indigoAccent.withValues(alpha: 0.2),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.05),
-                          ),
-                          borderRadius: BorderRadius.circular(20),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.2),
-                              blurRadius: 8,
-                              offset: const Offset(0, 4),
+                      child: InkWell(
+                        onTap: () {
+                          ref.read(connectionProvider.notifier).sendText(num);
+                          HapticFeedback.lightImpact();
+                        },
+                        borderRadius: BorderRadius.circular(20),
+                        splashColor: Colors.indigoAccent.withValues(alpha: 0.2),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.05),
                             ),
-                          ],
-                        ),
-                        alignment: Alignment.center,
-                        child: Text(
-                          num,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 24,
-                            fontWeight: FontWeight.w600,
+                            borderRadius: BorderRadius.circular(20),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.2),
+                                blurRadius: 8,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          alignment: Alignment.center,
+                          child: Text(
+                            num,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 24,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
                       ),
                     ),
-                  )
+              )
                   .animate()
                   .fadeIn(delay: (index * 20).ms, duration: 300.ms)
                   .slideY(begin: 0.1, end: 0);
@@ -694,22 +740,22 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen>
                   AppButton(
                     name: 'Netflix',
                     color: const Color(0xFFE50914),
-                    onTap: () => _launchApp('Netflix'),
+                    onTap: () => _launchApp(AppId.netflix),
                   ),
                   AppButton(
                     name: 'YouTube',
                     color: const Color(0xFFFF0000),
-                    onTap: () => _launchApp('YouTube'),
+                    onTap: () => _launchApp(AppId.youtube),
                   ),
                   AppButton(
                     name: 'Prime Video',
                     color: const Color(0xFF00A8E1),
-                    onTap: () => _launchApp('Prime Video'),
+                    onTap: () => _launchApp(AppId.primeVideo),
                   ),
                   AppButton(
                     name: 'Disney+',
                     color: const Color(0xFF113CCF),
-                    onTap: () => _launchApp('Disney+'),
+                    onTap: () => _launchApp(AppId.disneyPlus),
                   ),
                 ],
               )
@@ -730,7 +776,7 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen>
           ClipRRect(
             borderRadius: BorderRadius.circular(24),
             child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+              filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
               child: Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
@@ -792,6 +838,7 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen>
                             shape: BoxShape.circle,
                           ),
                           child: IconButton(
+                            tooltip: 'Send Text',
                             onPressed: () =>
                                 _sendText(_keyboardController.text),
                             icon: const Icon(
