@@ -22,15 +22,21 @@ class ScannerState {
     this.error,
   });
 
+  /// [clearError] mirrors the convention already used by
+  /// [DeviceConnectionState]. Without it `error` was the one field that did
+  /// not default to its current value, so every unrelated update - the scan
+  /// deadline, each discovered device, every stopScan - silently wiped an
+  /// error the user had not read yet.
   ScannerState copyWith({
     bool? isScanning,
     List<Device>? devices,
     String? error,
+    bool clearError = false,
   }) =>
       ScannerState(
         isScanning: isScanning ?? this.isScanning,
         devices: devices ?? this.devices,
-        error: error,
+        error: clearError ? null : (error ?? this.error),
       );
 }
 
@@ -57,7 +63,7 @@ class ScannerNotifier extends Notifier<ScannerState> {
       }
     }
 
-    state = state.copyWith(isScanning: true, devices: [], error: null);
+    state = state.copyWith(isScanning: true, devices: [], clearError: true);
 
     final serviceTypes = [
       '_roku._tcp',
