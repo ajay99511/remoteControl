@@ -5,11 +5,12 @@ import '../core/app_logger.dart';
 import '../models/app_id.dart';
 import '../models/command_result.dart';
 import '../models/remote_key.dart';
+import 'controller_health.dart';
 import 'device_controller.dart';
 
 /// Concrete [DeviceController] for Roku devices using the
 /// External Control Protocol (ECP).
-class RokuController implements DeviceController {
+class RokuController with HealthReporting implements DeviceController {
   final String host;
   final int port;
   final http.Client _client;
@@ -71,6 +72,7 @@ class RokuController implements DeviceController {
           .timeout(const Duration(seconds: 3));
       if (response.statusCode == 200) {
         _connected = true;
+        reportHealth(ControllerHealth.connected);
         log.d('RokuController: Connected to $host:$port');
       } else {
         throw Exception('Roku responded with status ${response.statusCode}');
@@ -86,6 +88,8 @@ class RokuController implements DeviceController {
   Future<void> disconnect() async {
     _connected = false;
     _client.close();
+    reportHealth(ControllerHealth.disconnected);
+    closeHealth();
     log.d('RokuController: Disconnected from $host:$port');
   }
 

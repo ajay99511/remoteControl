@@ -8,10 +8,11 @@ import '../models/app_id.dart';
 import '../models/command_result.dart';
 import '../models/remote_key.dart';
 import '../services/device_persistence_service.dart';
+import 'controller_health.dart';
 import 'device_controller.dart';
 
 /// LG webOS TV controller via SSAP WebSocket on port 3000 (Requirement 2.4).
-class LgController implements DeviceController {
+class LgController with HealthReporting implements DeviceController {
   final String host;
   final int port;
   final DevicePersistenceService _persistence;
@@ -92,6 +93,7 @@ class LgController implements DeviceController {
             _connected = true;
             if (!completer.isCompleted) completer.complete();
             _startHeartbeat();
+            reportHealth(ControllerHealth.connected);
             log.d('LgController: Connected to $host');
           } else if (data['type'] == 'error') {
             if (!completer.isCompleted) {
@@ -130,17 +132,20 @@ class LgController implements DeviceController {
   }
 
   void _handleDisconnect() {
+    final wasConnected = _connected;
     _connected = false;
     _heartbeatTimer?.cancel();
     _pongTimeoutTimer?.cancel();
     _channel?.sink.close();
     _channel = null;
     log.d('LgController: Disconnected from $host');
+    if (wasConnected) reportHealth(ControllerHealth.disconnected);
   }
 
   @override
   Future<void> disconnect() async {
     _handleDisconnect();
+    closeHealth();
   }
 
   @override

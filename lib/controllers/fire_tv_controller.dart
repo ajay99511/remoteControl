@@ -3,10 +3,11 @@ import '../models/app_id.dart';
 import '../models/command_result.dart';
 import '../models/device.dart';
 import '../models/remote_key.dart';
+import 'controller_health.dart';
 import 'device_controller.dart';
 
 /// Amazon Fire TV stub — returns UnsupportedDeviceException (Requirement 2.6).
-class FireTvController implements DeviceController {
+class FireTvController with HealthReporting implements DeviceController {
   @override
   Future<void> connect() async =>
       throw UnsupportedDeviceException(DeviceType.fireTv);

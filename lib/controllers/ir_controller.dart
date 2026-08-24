@@ -3,10 +3,11 @@ import '../models/app_id.dart';
 import '../models/command_result.dart';
 import '../models/device.dart';
 import '../models/remote_key.dart';
+import 'controller_health.dart';
 import 'device_controller.dart';
 
 /// Android IR blaster controller (Requirement 2.9).
-class IrController implements DeviceController {
+class IrController with HealthReporting implements DeviceController {
   final String brand;
   bool _connected = false;
 

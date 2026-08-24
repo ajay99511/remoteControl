@@ -1,3 +1,4 @@
+import 'controller_health.dart';
 import '../models/app_id.dart';
 import '../models/command_result.dart';
 import '../models/remote_key.dart';
@@ -31,6 +32,11 @@ abstract class DeviceController {
   ///
   /// Lets the UI disable a control rather than accept a press and drop it.
   Set<RemoteKey> get supportedKeys;
+
+  /// Emits whenever the transport's session state changes, including drops
+  /// the app did not initiate (heartbeat timeout, socket close, TV powered
+  /// off). Without this the app cannot notice a session it did not end.
+  Stream<ControllerHealth> get health;
 
   /// Whether the device is currently connected and reachable.
   bool get isConnected;

@@ -3,10 +3,11 @@ import '../models/app_id.dart';
 import '../models/command_result.dart';
 import '../models/device.dart';
 import '../models/remote_key.dart';
+import 'controller_health.dart';
 import 'device_controller.dart';
 
 /// Google TV / Android TV stub — returns UnsupportedDeviceException (Requirement 2.7).
-class GoogleTvController implements DeviceController {
+class GoogleTvController with HealthReporting implements DeviceController {
   @override
   Future<void> connect() async =>
       throw UnsupportedDeviceException(DeviceType.googleTv);

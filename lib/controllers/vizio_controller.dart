@@ -9,10 +9,11 @@ import '../models/app_id.dart';
 import '../models/command_result.dart';
 import '../models/remote_key.dart';
 import '../services/device_persistence_service.dart';
+import 'controller_health.dart';
 import 'device_controller.dart';
 
 /// Vizio SmartCast REST API controller on port 7345 (Requirement 2.5).
-class VizioController implements DeviceController {
+class VizioController with HealthReporting implements DeviceController {
   final String host;
   final int port;
   final http.Client _client;
@@ -50,6 +51,7 @@ class VizioController implements DeviceController {
       switch (response.statusCode) {
         case 200:
           _connected = true;
+          reportHealth(ControllerHealth.connected);
           log.d('VizioController: Connected to $host');
         case 401:
         case 403:
@@ -70,6 +72,8 @@ class VizioController implements DeviceController {
   @override
   Future<void> disconnect() async {
     _connected = false;
+    reportHealth(ControllerHealth.disconnected);
+    closeHealth();
     log.d('VizioController: Disconnected from $host');
   }
 

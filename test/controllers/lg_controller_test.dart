@@ -7,6 +7,7 @@ import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
+import 'package:devicecontroller/controllers/controller_health.dart';
 import 'package:devicecontroller/controllers/lg_controller.dart';
 import 'package:devicecontroller/models/command_result.dart';
 import 'package:devicecontroller/models/remote_key.dart';
@@ -135,6 +136,40 @@ void main() {
 
         expect(controller.isConnected, isFalse);
         inbound.close();
+      });
+    });
+
+    test('announces an unrequested disconnect on the health stream', () {
+      fakeAsync((async) {
+        final inbound = connectAndRegister(async);
+        final events = <ControllerHealth>[];
+        controller.health.listen(events.add);
+        async.flushMicrotasks();
+
+        // Nobody asked to disconnect; the heartbeat deadline fires.
+        async.elapse(const Duration(seconds: 36));
+        async.flushMicrotasks();
+
+        expect(
+          events,
+          contains(ControllerHealth.disconnected),
+          reason: 'a session the app did not end must still be announced, or '
+              'the UI goes on showing CONNECTED over a dead transport',
+        );
+        inbound.close();
+      });
+    });
+
+    test('does not announce a disconnect it never connected from', () {
+      fakeAsync((async) {
+        final events = <ControllerHealth>[];
+        controller.health.listen(events.add);
+        async.flushMicrotasks();
+
+        controller.disconnect();
+        async.flushMicrotasks();
+
+        expect(events, isEmpty);
       });
     });
 

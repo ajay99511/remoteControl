@@ -6,6 +6,7 @@ import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
+import 'package:devicecontroller/controllers/controller_health.dart';
 import 'package:devicecontroller/controllers/samsung_controller.dart';
 import 'package:devicecontroller/exceptions/certificate_pin_mismatch_exception.dart';
 import 'package:devicecontroller/models/app_id.dart';
@@ -194,6 +195,32 @@ void main() {
         }
 
         verify(mockSink.add('ping')).called(20);
+        inbound.close();
+      });
+    });
+
+    test('announces an unrequested disconnect on the health stream', () {
+      fakeAsync((async) {
+        final inbound = StreamController<dynamic>();
+        when(mockChannel.stream).thenAnswer((_) => inbound.stream);
+        when(mockPersistence.loadSamsungToken(any)).thenAnswer((_) async => 'token');
+
+        controller.connect();
+        async.flushMicrotasks();
+
+        final events = <ControllerHealth>[];
+        controller.health.listen(events.add);
+        async.flushMicrotasks();
+
+        // Nobody asked to disconnect; the heartbeat deadline fires.
+        async.elapse(const Duration(seconds: 36));
+        async.flushMicrotasks();
+
+        expect(
+          events,
+          contains(ControllerHealth.disconnected),
+          reason: 'a session the app did not end must still be announced',
+        );
         inbound.close();
       });
     });

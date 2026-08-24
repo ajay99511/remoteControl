@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../controllers/controller_health.dart';
 import '../controllers/device_controller.dart';
 import '../controllers/fire_tv_controller.dart';
 import '../controllers/google_tv_controller.dart';
@@ -62,6 +63,7 @@ class ConnectionNotifier extends Notifier<DeviceConnectionState> {
   late final DevicePersistenceService _persistence;
   late final ConnectivityService _connectivity;
   StreamSubscription? _connectivitySub;
+  StreamSubscription<ControllerHealth>? _healthSub;
 
   @override
   DeviceConnectionState build() {
@@ -72,6 +74,7 @@ class ConnectionNotifier extends Notifier<DeviceConnectionState> {
     
     ref.onDispose(() {
       _connectivitySub?.cancel();
+      _healthSub?.cancel();
       _controller?.disconnect();
     });
 
@@ -140,6 +143,7 @@ class ConnectionNotifier extends Notifier<DeviceConnectionState> {
       _controller = _buildController(device);
       await _controller!.connect();
       await _persistence.saveDevice(device);
+      _watchHealth(_controller!, device);
 
       state = DeviceConnectionState(
         status: ConnectionStatus.connected,
@@ -166,8 +170,30 @@ class ConnectionNotifier extends Notifier<DeviceConnectionState> {
     }
   }
 
+  /// Reflect transport-initiated session loss in app state.
+  ///
+  /// Without this the controller could tear its own session down - on a
+  /// heartbeat timeout, a socket close, or the TV being switched off - and
+  /// the UI would carry on showing CONNECTED over a remote that dropped every
+  /// press.
+  void _watchHealth(DeviceController controller, Device device) {
+    _healthSub?.cancel();
+    _healthSub = controller.health.listen((health) {
+      if (health != ControllerHealth.disconnected) return;
+      if (state.status != ConnectionStatus.connected) return;
+      log.w('ConnectionNotifier: ${device.name} dropped the session');
+      state = DeviceConnectionState(
+        status: ConnectionStatus.error,
+        device: device,
+        errorMessage: 'Lost connection to ${device.name}.',
+      );
+    });
+  }
+
   /// Disconnect from the current device.
   Future<void> disconnect() async {
+    await _healthSub?.cancel();
+    _healthSub = null;
     try {
       await _controller?.disconnect();
     } catch (e) {

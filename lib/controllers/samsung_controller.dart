@@ -12,6 +12,7 @@ import '../models/app_id.dart';
 import '../models/command_result.dart';
 import '../models/remote_key.dart';
 import '../services/device_persistence_service.dart';
+import 'controller_health.dart';
 import 'device_controller.dart';
 
 /// Outcome of comparing a presented certificate against the pinned one.
@@ -40,7 +41,7 @@ CertificateVerdict verifyFingerprint({
 }
 
 /// Concrete [DeviceController] for Samsung Smart TVs (Tizen).
-class SamsungController implements DeviceController {
+class SamsungController with HealthReporting implements DeviceController {
   final String host;
   final int port;
   final DevicePersistenceService _persistence;
@@ -216,6 +217,7 @@ class SamsungController implements DeviceController {
   void _onConnected(String protocol) {
     _connected = true;
     log.d('SamsungController: Connected to $host via $protocol');
+    reportHealth(ControllerHealth.connected);
     
     _channel!.stream.listen(
       (message) {
@@ -269,17 +271,22 @@ class SamsungController implements DeviceController {
   }
 
   void _handleDisconnect() {
+    final wasConnected = _connected;
     _connected = false;
     _heartbeatTimer?.cancel();
     _pongTimeoutTimer?.cancel();
     _channel?.sink.close();
     _channel = null;
     log.d('SamsungController: Disconnected from $host');
+    // Announce it even when the app did not ask - a heartbeat timeout or a
+    // socket close reaches here too, and used to stop dead at this line.
+    if (wasConnected) reportHealth(ControllerHealth.disconnected);
   }
 
   @override
   Future<void> disconnect() async {
     _handleDisconnect();
+    closeHealth();
   }
 
   @override

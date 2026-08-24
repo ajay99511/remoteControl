@@ -2,11 +2,12 @@ import '../core/app_logger.dart';
 import '../models/app_id.dart';
 import '../models/command_result.dart';
 import '../models/remote_key.dart';
+import 'controller_health.dart';
 import 'device_controller.dart';
 
 /// A mock [DeviceController] that simulates network connections
 /// and remote control interactions for testing purposes.
-class MockController implements DeviceController {
+class MockController with HealthReporting implements DeviceController {
   final String deviceName;
   bool _connected = false;
 
@@ -17,12 +18,15 @@ class MockController implements DeviceController {
     // Simulate connection delay
     await Future.delayed(const Duration(milliseconds: 1500));
     _connected = true;
+    reportHealth(ControllerHealth.connected);
     log.d('MockController: Successfully connected to $deviceName');
   }
 
   @override
   Future<void> disconnect() async {
     _connected = false;
+    reportHealth(ControllerHealth.disconnected);
+    closeHealth();
     log.d('MockController: Disconnected from $deviceName');
   }
 
