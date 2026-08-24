@@ -206,9 +206,15 @@ class LgController implements DeviceController {
     }
   }
 
+  // webOS exposes no SSAP URI for D-pad arrows; they are reachable only over
+  // the pointer input socket, obtained via
+  // ssap://com.webos.service.networkinput/getPointerInputSocket.
+  //
+  // up/down were previously mapped to set3DOn/set3DOff, so the two most-used
+  // navigation keys toggled the TV's 3D mode - not navigation, and hard for a
+  // user to undo. Until the pointer socket is implemented, these keys report
+  // as unsupported so the UI can say so instead of firing something unrelated.
   static const Map<RemoteKey, String> _ssapUris = {
-    RemoteKey.up: 'ssap://com.webos.service.tv.display/set3DOn', // Placeholder, LG often uses pointer
-    RemoteKey.down: 'ssap://com.webos.service.tv.display/set3DOff',
     RemoteKey.volumeUp: 'ssap://audio/volumeUp',
     RemoteKey.volumeDown: 'ssap://audio/volumeDown',
     RemoteKey.mute: 'ssap://audio/setMute',

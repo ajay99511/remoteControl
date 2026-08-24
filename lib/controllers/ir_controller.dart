@@ -14,11 +14,14 @@ class IrController implements DeviceController {
 
   @override
   Future<void> connect() async {
-    // In a real app, this would check for IR hardware via a platform channel.
-    // For this hardened version, we assume IR is available if it reaches here,
-    // or throw if it's known to be missing.
-    _connected = true;
-    log.d('IrController: Initialized for brand $brand');
+    // IR transmission needs an Android ConsumerIrManager binding that does not
+    // exist yet: there is no MethodChannel in this project and MainActivity.kt
+    // is the stock Flutter template. Reporting success here produced a remote
+    // that displayed "CONNECTED" and silently transmitted nothing.
+    //
+    // To implement: MethodChannel('devicecontroller/ir') ->
+    // ConsumerIrManager.hasIrEmitter() / .transmit(frequency, pattern).
+    throw const UnsupportedDeviceException(DeviceType.ir);
   }
 
   @override

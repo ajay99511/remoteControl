@@ -115,6 +115,34 @@ void main() {
       });
     });
 
+    test('D-pad keys emit nothing rather than toggling 3D mode', () {
+      fakeAsync((async) {
+        final inbound = connectAndRegister(async);
+
+        for (final key in [
+          RemoteKey.up,
+          RemoteKey.down,
+          RemoteKey.left,
+          RemoteKey.right,
+        ]) {
+          controller.sendKey(key);
+        }
+        async.flushMicrotasks();
+
+        final frames = verify(mockSink.add(captureAny)).captured
+            .whereType<String>()
+            .join('\n');
+        expect(
+          frames,
+          isNot(contains('set3D')),
+          reason: 'up/down were wired to the TV 3D toggle, which is not '
+              'navigation and is hard for a user to undo',
+        );
+        expect(frames, isNot(contains('"type":"request"')));
+        inbound.close();
+      });
+    });
+
     test('sendKey(volumeUp) emits the ssap://audio/volumeUp request', () {
       fakeAsync((async) {
         final inbound = connectAndRegister(async);

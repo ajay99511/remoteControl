@@ -1,12 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:http/http.dart' as http;
 
 import '../core/app_logger.dart';
+import '../exceptions/pairing_required_exception.dart';
 import '../models/app_id.dart';
 import '../models/remote_key.dart';
+import '../services/device_persistence_service.dart';
 import 'device_controller.dart';
 
 /// Vizio SmartCast REST API controller on port 7345 (Requirement 2.5).
@@ -18,32 +19,45 @@ class VizioController implements DeviceController {
   bool _connected = false;
   String? _authToken;
 
+  final DevicePersistenceService _persistence;
+
   VizioController({
     required this.host,
+    required DevicePersistenceService persistence,
     this.port = 7345,
     http.Client? client,
-  }) : _client = client ?? http.Client();
+  })  : _persistence = persistence,
+        _client = client ?? http.Client();
 
-  Uri _smartCastUri(String path) =>
-      Uri.parse('https://$host:$port/$path');
+  Uri _smartCastUri(String path) => Uri.parse('https://$host:$port/$path');
 
   @override
   Future<void> connect() async {
-    // Note: Vizio requires a pairing flow to get an auth token.
-    // This implementation assumes the token is either not needed for basic
-    // commands or handled via a separate pairing process.
-    // For this hardened version, we'll try a basic GET to see if it's reachable.
     try {
+      // Use the token from a previous pairing, if any. This storage API
+      // existed but had no caller, so _authToken was permanently null and the
+      // AUTH header was never sent.
+      _authToken = await _persistence.loadVizioToken(host);
+
       final response = await _client
-          .get(_smartCastUri('state/device/info'))
+          .get(
+            _smartCastUri('state/device/info'),
+            headers: {'AUTH': ?_authToken},
+          )
           .timeout(const Duration(seconds: 3));
-      
-      // In a real scenario, we'd handle the 401 and start pairing.
-      if (response.statusCode == 200 || response.statusCode == 401) {
-        _connected = true;
-        log.d('VizioController: Connected to $host');
-      } else {
-        throw Exception('Vizio responded with status ${response.statusCode}');
+
+      switch (response.statusCode) {
+        case 200:
+          _connected = true;
+          log.d('VizioController: Connected to $host');
+        case 401:
+        case 403:
+          // Reachable, but not paired. Recording this as success left an
+          // unauthenticated session reporting as connected, after which every
+          // command 401'd into a swallowed catch.
+          throw PairingRequiredException(host);
+        default:
+          throw Exception('Vizio responded with status ${response.statusCode}');
       }
     } catch (e) {
       _connected = false;
@@ -86,7 +100,7 @@ class VizioController implements DeviceController {
         _smartCastUri('key_command/'),
         headers: {
           'Content-Type': 'application/json',
-          if (_authToken != null) 'X-Auth-Token': _authToken!,
+          'AUTH': ?_authToken,
         },
         body: jsonEncode(payload),
       ).timeout(const Duration(seconds: 3));

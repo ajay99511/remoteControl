@@ -205,6 +205,7 @@ class ConnectionNotifier extends Notifier<DeviceConnectionState> {
       DeviceType.vizio => VizioController(
           host: device.ip!,
           port: device.port ?? 7345,
+          persistence: persistence,
         ),
       DeviceType.fireTv => FireTvController(),
       DeviceType.googleTv => GoogleTvController(),
