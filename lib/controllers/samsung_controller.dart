@@ -7,10 +7,36 @@ import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../core/app_logger.dart';
+import '../exceptions/certificate_pin_mismatch_exception.dart';
 import '../models/app_id.dart';
 import '../models/remote_key.dart';
 import '../services/device_persistence_service.dart';
 import 'device_controller.dart';
+
+/// Outcome of comparing a presented certificate against the pinned one.
+enum CertificateVerdict {
+  /// No pin recorded yet: trust this certificate and remember it.
+  pinNew,
+
+  /// Presented fingerprint matches the pin.
+  trusted,
+
+  /// Presented fingerprint contradicts the pin. Refuse, and do not downgrade.
+  rejected,
+}
+
+/// The Trust-On-First-Use decision, kept pure so the security rule is testable
+/// without a socket. [stored] is the pin from secure storage, [presented] the
+/// SHA-256 of the certificate the device just offered.
+CertificateVerdict verifyFingerprint({
+  required String? stored,
+  required String presented,
+}) {
+  if (stored == null) return CertificateVerdict.pinNew;
+  return stored == presented
+      ? CertificateVerdict.trusted
+      : CertificateVerdict.rejected;
+}
 
 /// Concrete [DeviceController] for Samsung Smart TVs (Tizen).
 class SamsungController implements DeviceController {
@@ -79,69 +105,111 @@ class SamsungController implements DeviceController {
     AppId.appleTv: '3201807016597',
   };
 
+  static const _clientName = 'FlutterRemote';
+  static const _securePort = 8002; // Tizen 2016+ (WSS)
+  static const _legacyPort = 8001; // pre-2016 (plaintext WS)
+  static const _connectTimeout = Duration(seconds: 3);
+  static const _channelPath = '/api/v2/channels/samsung.remote.control';
+
   @override
   Future<void> connect() async {
     try {
-      final nameBase64 = base64Encode(utf8.encode('FlutterRemote'));
+      final nameBase64 = base64Encode(utf8.encode(_clientName));
       final token = await _persistence.loadSamsungToken(host);
       final tokenQuery = token != null ? '&token=$token' : '';
+      final query = 'name=$nameBase64$tokenQuery';
+
+      final wssUrl = Uri.parse('wss://$host:$_securePort$_channelPath?$query');
+
+      if (_channelFactory != null) {
+        _channel = _channelFactory(wssUrl);
+        _onConnected('mock-wss:$_securePort');
+        return;
+      }
 
       try {
-        // Attempt 1: Modern WSS on port 8002 (Tizen 2016+) with TOFU
-        final wssUrl = Uri.parse(
-          'wss://$host:8002/api/v2/channels/samsung.remote.control?name=$nameBase64$tokenQuery',
-        );
-
-        if (_channelFactory != null) {
-          _channel = _channelFactory!(wssUrl);
-          _onConnected('mock-wss:8002');
-          return;
-        }
-
-        final storedFingerprint = await _persistence.loadCertFingerprint(host);
-
-        final httpClient = HttpClient()
-          ..badCertificateCallback = (cert, certHost, certPort) {
-            final fingerprint = sha256.convert(cert.der).toString();
-            if (storedFingerprint == null) {
-              log.i('SamsungController: Pinning new certificate for $host');
-              _persistence.saveCertFingerprint(host, fingerprint);
-              return true;
-            }
-            if (storedFingerprint == fingerprint) {
-              return true;
-            }
-            log.e('SamsungController: TOFU mismatch for $host!');
-            return false;
-          };
-
-        final socket = await WebSocket.connect(
-          wssUrl.toString(),
-          customClient: httpClient,
-        ).timeout(const Duration(seconds: 3));
-
-        _channel = IOWebSocketChannel(socket);
-        _onConnected('wss:8002');
+        await _connectSecure(wssUrl);
         return;
+      } on CertificatePinMismatchException {
+        // Fail CLOSED. A pin mismatch is precisely the attack TOFU exists to
+        // detect; downgrading to plaintext here would hand the attacker the
+        // pairing token that travels in the query string.
+        rethrow;
       } catch (e) {
-        log.d('SamsungController: wss://8002 failed, trying ws://8001 ($e)');
+        log.d(
+          'SamsungController: wss://$host:$_securePort unavailable, '
+          'trying legacy ws://$host:$_legacyPort ($e)',
+        );
       }
 
-      // Attempt 2: Legacy WS on port 8001
-      final wsUrl = Uri.parse(
-        'ws://$host:8001/api/v2/channels/samsung.remote.control?name=$nameBase64$tokenQuery',
+      // Attempt 2: legacy plaintext WS, only for TVs that never offered TLS.
+      final wsUrl = Uri.parse('ws://$host:$_legacyPort$_channelPath?$query');
+      _channel = IOWebSocketChannel(
+        await WebSocket.connect(wsUrl.toString()).timeout(_connectTimeout),
       );
-      if (_channelFactory != null) {
-        _channel = _channelFactory!(wsUrl);
-      } else {
-        _channel = IOWebSocketChannel(await WebSocket.connect(wsUrl.toString()).timeout(const Duration(seconds: 3)));
-      }
-      _onConnected('ws:8001');
+      _onConnected('ws:$_legacyPort');
     } catch (e) {
       _connected = false;
       log.e('SamsungController: Samsung TV not reachable at $host', e);
       rethrow;
     }
+  }
+
+  /// Opens the pinned WSS channel, or throws.
+  ///
+  /// Throws [CertificatePinMismatchException] when the presented certificate
+  /// contradicts the pin recorded on first use. The caller must not fall back
+  /// to plaintext on that exception.
+  Future<void> _connectSecure(Uri wssUrl) async {
+    final storedFingerprint = await _persistence.loadCertFingerprint(host);
+    CertificateVerdict? verdict;
+    String? presented;
+
+    final httpClient = HttpClient()
+      ..badCertificateCallback = (cert, certHost, certPort) {
+        presented = sha256.convert(cert.der).toString();
+        verdict = verifyFingerprint(
+          stored: storedFingerprint,
+          presented: presented!,
+        );
+        switch (verdict!) {
+          case CertificateVerdict.pinNew:
+            log.i('SamsungController: pinning new certificate for $host');
+            return true;
+          case CertificateVerdict.trusted:
+            return true;
+          case CertificateVerdict.rejected:
+            log.e(
+              'SamsungController: TOFU mismatch for $host - refusing connection',
+            );
+            return false;
+        }
+      };
+
+    final WebSocket socket;
+    try {
+      socket = await WebSocket.connect(
+        wssUrl.toString(),
+        customClient: httpClient,
+      ).timeout(_connectTimeout);
+    } catch (e) {
+      // Distinguish "we refused this certificate" from "the TV has no TLS".
+      // Both surface as a HandshakeException, and conflating them is what
+      // made the pin unenforceable.
+      if (verdict == CertificateVerdict.rejected) {
+        throw CertificatePinMismatchException(host);
+      }
+      rethrow;
+    }
+
+    // Commit the pin only once the handshake has actually succeeded, and await
+    // it so a storage failure is not silently dropped.
+    if (verdict == CertificateVerdict.pinNew && presented != null) {
+      await _persistence.saveCertFingerprint(host, presented!);
+    }
+
+    _channel = IOWebSocketChannel(socket);
+    _onConnected('wss:$_securePort');
   }
 
   void _onConnected(String protocol) {

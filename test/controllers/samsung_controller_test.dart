@@ -7,6 +7,7 @@ import 'package:mockito/mockito.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import 'package:devicecontroller/controllers/samsung_controller.dart';
+import 'package:devicecontroller/exceptions/certificate_pin_mismatch_exception.dart';
 import 'package:devicecontroller/models/app_id.dart';
 import 'package:devicecontroller/models/remote_key.dart';
 import 'package:devicecontroller/services/device_persistence_service.dart';
@@ -35,6 +36,40 @@ void main() {
       persistence: mockPersistence,
       channelFactory: (_) => mockChannel,
     );
+  });
+
+  group('verifyFingerprint (TOFU decision)', () {
+    const fingerprint = 'aa:bb:cc';
+
+    test('pins on first contact when nothing is stored', () {
+      expect(
+        verifyFingerprint(stored: null, presented: fingerprint),
+        CertificateVerdict.pinNew,
+      );
+    });
+
+    test('trusts a certificate matching the stored pin', () {
+      expect(
+        verifyFingerprint(stored: fingerprint, presented: fingerprint),
+        CertificateVerdict.trusted,
+      );
+    });
+
+    test('rejects a certificate contradicting the stored pin', () {
+      expect(
+        verifyFingerprint(stored: fingerprint, presented: 'dd:ee:ff'),
+        CertificateVerdict.rejected,
+      );
+    });
+  });
+
+  group('CertificatePinMismatchException', () {
+    test('carries the host and a message that does not leak internals', () {
+      const e = CertificatePinMismatchException('192.168.1.5');
+      expect(e.host, '192.168.1.5');
+      expect(e.message, contains('security certificate'));
+      expect(e.message, isNot(contains('sha256')));
+    });
   });
 
   group('SamsungController', () {
