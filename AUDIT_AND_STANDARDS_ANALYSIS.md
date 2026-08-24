@@ -618,12 +618,20 @@ connected (green dot, "CONNECTED") and does nothing (Finding **C-3**).
   Line 137 is the worse of the two: it sits inside `StatefulBuilder`'s builder (`:50`), so a fresh
   `TextEditingController` — a `ChangeNotifier` retained by the `TextField`'s element until GC — is
   allocated on **every keystroke** in the IP field, because each `onChanged` at `:113-117` calls
-  `setDialogState`. It also produces a visible UX defect: the port field's text and cursor position
-  reset mid-edit whenever the IP field changes, since the widget receives a brand-new controller with
-  `text: '$selectedPort'`.
-- **Impact.** Unbounded `ChangeNotifier` accumulation while the dialog is open, plus a port field that
-  fights the user. Violates the Flutter contract that a widget-created `TextEditingController` must be
-  disposed by that widget.
+  `setDialogState`.
+
+  > **Correction (verified during remediation).** The first draft of this finding also claimed the
+  > port field's *text* resets mid-edit. It does not: `onChanged` at `:141` writes to `selectedPort`,
+  > so a valid numeric edit is reseeded intact. Reproducing the old pattern in a scratch widget test
+  > showed the two user-visible defects are narrower and different:
+  > - **Caret loss** — the replacement controller's selection defaults to invalid, so the caret jumps
+  >   out of the port field on every IP keystroke (measured: `offset: 4` → `TextSelection.invalid`).
+  > - **Silent reversion** — `int.tryParse(v) ?? selectedPort` at `:141` means *clearing* the port
+  >   field leaves `selectedPort` at its old value, and the next rebuild repopulates the field with
+  >   it (measured: cleared field → `"8060"`).
+- **Impact.** Unbounded `ChangeNotifier` accumulation while the dialog is open; a caret that jumps out
+  of the field; and a port the user cleared silently reverting behind them. Violates the Flutter
+  contract that a widget-created `TextEditingController` must be disposed by that widget.
 - **Remediation.** Promote the dialog to a `StatefulWidget` that owns its controllers — which also
   fixes the port-reset defect and makes the dialog independently testable (it is currently reachable
   only through the 11-second smoke test):

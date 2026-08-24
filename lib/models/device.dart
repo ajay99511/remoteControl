@@ -42,6 +42,18 @@ enum DeviceType {
   String toJson() => name;
 }
 
+/// Default control port per device type.
+///
+/// Single source of truth: these five numbers were previously duplicated
+/// across the connection factory, the manual-connect dialog and both
+/// discovery matchers, free to drift apart.
+const Map<DeviceType, int> kDefaultPorts = {
+  DeviceType.roku: 8060,
+  DeviceType.samsung: 8001,
+  DeviceType.lg: 3000,
+  DeviceType.vizio: 7345,
+};
+
 @immutable
 class Device {
   final String id;

@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 
 import '../models/device.dart';
+import 'manual_connect_dialog.dart';
 import '../providers/connection_provider.dart';
 import '../providers/scanner_provider.dart';
 
@@ -26,172 +27,13 @@ class _DeviceScannerScreenState extends ConsumerState<DeviceScannerScreen> {
     });
   }
 
-  void _handleManualConnect() {
-    showDialog(
+  Future<void> _handleManualConnect() async {
+    final device = await showDialog<Device>(
       context: context,
-      builder: (context) {
-        final TextEditingController ipController = TextEditingController();
-        DeviceType selectedType = DeviceType.roku;
-        int selectedPort = 8060;
-        String? ipError;
-
-        final defaultPorts = {
-          DeviceType.roku: 8060,
-          DeviceType.samsung: 8001,
-          DeviceType.lg: 3000,
-          DeviceType.vizio: 7345,
-        };
-
-        final ipRegex = RegExp(
-          r'^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}$' // IPv4
-          r'|^([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$', // IPv6
-        );
-
-        return StatefulBuilder(builder: (context, setDialogState) {
-          return AlertDialog(
-            backgroundColor: const Color(0xFF18181B),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-            ),
-            title: const Text(
-              'Connect via IP',
-              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-            ),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const Text(
-                    'Device Type',
-                    style: TextStyle(color: Colors.white70, fontSize: 12),
-                  ),
-                  const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButton<DeviceType>(
-                        value: selectedType,
-                        dropdownColor: const Color(0xFF18181B),
-                        style: const TextStyle(color: Colors.white),
-                        isExpanded: true,
-                        items: [
-                          DeviceType.roku,
-                          DeviceType.samsung,
-                          DeviceType.lg,
-                          DeviceType.vizio
-                        ].map((t) {
-                          return DropdownMenuItem(
-                            value: t,
-                            child: Text(t.name.toUpperCase()),
-                          );
-                        }).toList(),
-                        onChanged: (t) {
-                          if (t != null) {
-                            setDialogState(() {
-                              selectedType = t;
-                              selectedPort = defaultPorts[t] ?? 80;
-                            });
-                          }
-                        },
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'IP Address',
-                    style: TextStyle(color: Colors.white70, fontSize: 12),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: ipController,
-                    style: const TextStyle(color: Colors.white),
-                    onChanged: (v) {
-                      setDialogState(() {
-                        ipError = ipRegex.hasMatch(v) ? null : 'Invalid IP address';
-                      });
-                    },
-                    decoration: InputDecoration(
-                      hintText: 'e.g., 192.168.1.105',
-                      hintStyle: const TextStyle(color: Colors.grey),
-                      errorText: ipError,
-                      filled: true,
-                      fillColor: Colors.black.withValues(alpha: 0.2),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide.none,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Port',
-                    style: TextStyle(color: Colors.white70, fontSize: 12),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: TextEditingController(text: '$selectedPort'),
-                    style: const TextStyle(color: Colors.white),
-                    keyboardType: TextInputType.number,
-                    onChanged: (v) {
-                      selectedPort = int.tryParse(v) ?? selectedPort;
-                    },
-                    decoration: InputDecoration(
-                      filled: true,
-                      fillColor: Colors.black.withValues(alpha: 0.2),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide.none,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
-              ),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.indigoAccent,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                onPressed: (ipError == null && ipController.text.isNotEmpty)
-                    ? () {
-                        Navigator.pop(context);
-                        final device = Device(
-                          id: 'manual-${DateTime.now().millisecondsSinceEpoch}',
-                          name: 'Manual ${selectedType.name.toUpperCase()}',
-                          type: selectedType,
-                          model: 'Custom IP',
-                          signal: 100,
-                          ip: ipController.text,
-                          port: selectedPort,
-                        );
-                        ref.read(connectionProvider.notifier).connect(device);
-                      }
-                    : null,
-                child: const Text(
-                  'Connect',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ],
-          );
-        });
-      },
+      builder: (_) => const ManualConnectDialog(),
     );
+    if (device == null || !mounted) return;
+    await ref.read(connectionProvider.notifier).connect(device);
   }
 
   @override
