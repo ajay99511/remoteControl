@@ -1,12 +1,14 @@
-import '../core/app_logger.dart';
-import '../models/app_id.dart';
-import '../models/command_result.dart';
-import '../models/remote_key.dart';
-import 'controller_health.dart';
-import 'device_controller.dart';
+import 'package:devicecontroller/core/app_logger.dart';
+import 'package:devicecontroller/models/app_id.dart';
+import 'package:devicecontroller/models/command_result.dart';
+import 'package:devicecontroller/models/remote_key.dart';
+import 'package:devicecontroller/controllers/controller_health.dart';
+import 'package:devicecontroller/controllers/device_controller.dart';
 
-/// A mock [DeviceController] that simulates network connections
-/// and remote control interactions for testing purposes.
+/// A fake [DeviceController] for tests.
+///
+/// Previously shipped in lib/ and was selected in production by a 'mock-'
+/// prefix on a user-influenceable device id.
 class MockController with HealthReporting implements DeviceController {
   final String deviceName;
   bool _connected = false;

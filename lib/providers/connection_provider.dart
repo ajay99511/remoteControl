@@ -6,14 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../controllers/controller_health.dart';
 import '../controllers/device_controller.dart';
-import '../controllers/fire_tv_controller.dart';
-import '../controllers/google_tv_controller.dart';
-import '../controllers/ir_controller.dart';
-import '../controllers/lg_controller.dart';
-import '../controllers/mock_controller.dart';
-import '../controllers/roku_controller.dart';
-import '../controllers/samsung_controller.dart';
-import '../controllers/vizio_controller.dart';
+import '../controllers/device_controller_factory.dart';
 import '../core/app_logger.dart';
 import '../exceptions/certificate_pin_mismatch_exception.dart';
 import '../exceptions/pairing_required_exception.dart';
@@ -62,6 +55,7 @@ class ConnectionNotifier extends Notifier<DeviceConnectionState> {
 
   late final DevicePersistenceService _persistence;
   late final ConnectivityService _connectivity;
+  late final DeviceControllerFactory _makeController;
   StreamSubscription? _connectivitySub;
   StreamSubscription<ControllerHealth>? _healthSub;
 
@@ -69,6 +63,7 @@ class ConnectionNotifier extends Notifier<DeviceConnectionState> {
   DeviceConnectionState build() {
     _persistence = ref.read(devicePersistenceProvider);
     _connectivity = ref.read(connectivityServiceProvider);
+    _makeController = ref.read(deviceControllerFactoryProvider);
     
     _connectivitySub = _connectivity.onConnectivityChanged.listen(_onConnectivityChanged);
     
@@ -123,7 +118,9 @@ class ConnectionNotifier extends Notifier<DeviceConnectionState> {
   static bool _isRetryable(Object e) =>
       e is! UnsupportedDeviceException &&
       e is! CertificatePinMismatchException &&
-      e is! PairingRequiredException;
+      e is! PairingRequiredException &&
+      // A device with no address cannot acquire one by waiting.
+      e is! ArgumentError;
 
   /// A message safe to put in front of a user: no stack frames, no exception
   /// class names, and an action to take where one exists.
@@ -140,7 +137,7 @@ class ConnectionNotifier extends Notifier<DeviceConnectionState> {
 
   Future<void> _connectWithBackoff(Device device) async {
     try {
-      _controller = _buildController(device);
+      _controller = _makeController(device);
       await _controller!.connect();
       await _persistence.saveDevice(device);
       _watchHealth(_controller!, device);
@@ -252,40 +249,6 @@ class ConnectionNotifier extends Notifier<DeviceConnectionState> {
     }
   }
 
-  /// Factory method — instantiate the correct controller for the device type.
-  DeviceController _buildController(Device device) {
-    if (device.id.startsWith('mock-')) {
-      return MockController(deviceName: device.name);
-    }
-
-    final persistence = ref.read(devicePersistenceProvider);
-
-    return switch (device.type) {
-      DeviceType.roku => RokuController(
-          host: device.ip!,
-          port: device.port ?? 8060,
-        ),
-      DeviceType.samsung => SamsungController(
-          host: device.ip!,
-          port: device.port ?? 8001,
-          persistence: persistence,
-        ),
-      DeviceType.lg => LgController(
-          host: device.ip!,
-          port: device.port ?? 3000,
-          persistence: persistence,
-        ),
-      DeviceType.vizio => VizioController(
-          host: device.ip!,
-          port: device.port ?? 7345,
-          persistence: persistence,
-        ),
-      DeviceType.fireTv => FireTvController(),
-      DeviceType.googleTv => GoogleTvController(),
-      DeviceType.ir => IrController(brand: device.model),
-      DeviceType.unknown => throw UnsupportedDeviceException(device.type),
-    };
-  }
 }
 
 /// Global provider for the device connection.
