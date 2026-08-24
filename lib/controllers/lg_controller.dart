@@ -21,18 +21,24 @@ class LgController implements DeviceController {
   Timer? _pongTimeoutTimer;
   String? _clientKey;
 
+  /// Seam for tests, mirroring [SamsungController]. Production passes null and
+  /// the real socket is opened by [WebSocketChannel.connect].
+  final WebSocketChannel Function(Uri)? _channelFactory;
+
   LgController({
     required this.host,
     this.port = 3000,
     required DevicePersistenceService persistence,
-  }) : _persistence = persistence;
+    WebSocketChannel Function(Uri)? channelFactory,
+  })  : _persistence = persistence,
+        _channelFactory = channelFactory;
 
   @override
   Future<void> connect() async {
     try {
       _clientKey = await _persistence.loadLgClientKey(host);
       final wsUrl = Uri.parse('ws://$host:$port');
-      _channel = WebSocketChannel.connect(wsUrl);
+      _channel = _channelFactory?.call(wsUrl) ?? WebSocketChannel.connect(wsUrl);
 
       // 1. Send register payload
       final registerPayload = {
@@ -61,27 +67,43 @@ class LgController implements DeviceController {
       final completer = Completer<void>();
       _channel!.stream.listen(
         (message) {
-          final data = jsonDecode(message);
+          // Any inbound frame proves liveness, so clear the pong deadline
+          // before any parsing that can throw. Testing the sentinel after
+          // jsonDecode made this branch unreachable and guaranteed a
+          // disconnect at T+35s.
+          _pongTimeoutTimer?.cancel();
+
+          if (message is! String || message == 'pong') return;
+
+          final Map<String, dynamic> data;
+          try {
+            data = jsonDecode(message) as Map<String, dynamic>;
+          } on FormatException catch (e, s) {
+            log.d('LgController: ignoring non-JSON frame', e, s);
+            return;
+          }
+
           if (data['type'] == 'registered') {
-            _clientKey = data['payload']['client-key'];
+            _clientKey = data['payload']?['client-key'] as String?;
             if (_clientKey != null) {
-              _persistence.saveLgClientKey(host, _clientKey!);
+              unawaited(_persistence.saveLgClientKey(host, _clientKey!));
             }
             _connected = true;
             if (!completer.isCompleted) completer.complete();
             _startHeartbeat();
             log.d('LgController: Connected to $host');
           } else if (data['type'] == 'error') {
-            if (!completer.isCompleted) completer.completeError(Exception(data['error']));
-          } else if (message == 'pong') {
-            _pongTimeoutTimer?.cancel();
+            if (!completer.isCompleted) {
+              completer.completeError(Exception(data['error']));
+            }
           }
         },
-        onDone: () => _handleDisconnect(),
-        onError: (e) {
-          if (!completer.isCompleted) completer.completeError(e);
+        onDone: _handleDisconnect,
+        onError: (Object e, StackTrace s) {
+          if (!completer.isCompleted) completer.completeError(e, s);
           _handleDisconnect();
         },
+        cancelOnError: false,
       );
 
       await completer.future.timeout(const Duration(seconds: 10));

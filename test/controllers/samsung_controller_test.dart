@@ -108,5 +108,51 @@ void main() {
         expect(controller.isConnected, isFalse);
       });
     });
+
+    test('inbound pong cancels the disconnect deadline', () {
+      fakeAsync((async) {
+        final inbound = StreamController<dynamic>();
+        when(mockChannel.stream).thenAnswer((_) => inbound.stream);
+        when(mockPersistence.loadSamsungToken(any)).thenAnswer((_) async => 'token');
+
+        controller.connect();
+        async.flushMicrotasks();
+
+        // Heartbeat fires at 30s and arms a 5s pong deadline.
+        async.elapse(const Duration(seconds: 30));
+        verify(mockSink.add('ping')).called(1);
+
+        // The TV answers. This must cancel the deadline.
+        inbound.add('pong');
+        async.flushMicrotasks();
+        async.elapse(const Duration(seconds: 10));
+
+        expect(
+          controller.isConnected,
+          isTrue,
+          reason: 'a pong reply must cancel the disconnect deadline',
+        );
+        inbound.close();
+      });
+    });
+
+    test('a non-JSON frame does not tear down the stream', () {
+      fakeAsync((async) {
+        final inbound = StreamController<dynamic>();
+        when(mockChannel.stream).thenAnswer((_) => inbound.stream);
+        when(mockPersistence.loadSamsungToken(any)).thenAnswer((_) async => 'token');
+
+        controller.connect();
+        async.flushMicrotasks();
+
+        // Some Tizen revisions emit bare text frames. Decoding must not throw
+        // out of the listener.
+        inbound.add('not json at all');
+        async.flushMicrotasks();
+
+        expect(controller.isConnected, isTrue);
+        inbound.close();
+      });
+    });
   });
 }

@@ -150,18 +150,36 @@ class SamsungController implements DeviceController {
     
     _channel!.stream.listen(
       (message) {
-        final data = jsonDecode(message);
+        // Any inbound frame proves liveness, so clear the pong deadline before
+        // any parsing that can throw. Testing the sentinel after jsonDecode
+        // made this branch unreachable and guaranteed a disconnect at T+35s.
+        _pongTimeoutTimer?.cancel();
+
+        if (message is! String || message == 'pong') return;
+
+        final Map<String, dynamic> data;
+        try {
+          data = jsonDecode(message) as Map<String, dynamic>;
+        } on FormatException catch (e, s) {
+          // Some Tizen revisions emit bare text frames. They are liveness
+          // evidence, not an error, and must not escape the listener.
+          log.d('SamsungController: ignoring non-JSON frame', e, s);
+          return;
+        }
+
         if (data['event'] == 'ms.channel.connect') {
-          final token = data['data']['token'];
+          final token = data['data']?['token'] as String?;
           if (token != null) {
-            _persistence.saveSamsungToken(host, token);
+            unawaited(_persistence.saveSamsungToken(host, token));
           }
-        } else if (message == 'pong') {
-          _pongTimeoutTimer?.cancel();
         }
       },
-      onDone: () => _handleDisconnect(),
-      onError: (e) => log.e('SamsungController: WebSocket error', e),
+      onDone: _handleDisconnect,
+      onError: (Object e, StackTrace s) {
+        log.e('SamsungController: WebSocket error', e, s);
+        _handleDisconnect();
+      },
+      cancelOnError: false,
     );
 
     _startHeartbeat();
