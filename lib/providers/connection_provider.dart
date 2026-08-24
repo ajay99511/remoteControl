@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -49,9 +50,16 @@ class DeviceConnectionState {
 /// Riverpod [Notifier] that manages the connection to a selected device.
 class ConnectionNotifier extends Notifier<DeviceConnectionState> {
   DeviceController? _controller;
-  int _retryCount = 0;
+
   static const _maxRetries = 4;
-  static const _retryDelays = [1, 2, 4, 8]; // seconds
+  static const _baseDelay = Duration(seconds: 1);
+
+  /// Identifies the current attempt chain. Any newer call to [connect] wins,
+  /// so a chain that has been superseded stops instead of racing the winner
+  /// for the right to assign state.
+  int _attemptEpoch = 0;
+  bool _disposed = false;
+  final Random _rng = Random();
 
   late final DevicePersistenceService _persistence;
   late final ConnectivityService _connectivity;
@@ -68,6 +76,7 @@ class ConnectionNotifier extends Notifier<DeviceConnectionState> {
     _connectivitySub = _connectivity.onConnectivityChanged.listen(_onConnectivityChanged);
     
     ref.onDispose(() {
+      _disposed = true;
       _connectivitySub?.cancel();
       _healthSub?.cancel();
       _controller?.disconnect();
@@ -105,7 +114,6 @@ class ConnectionNotifier extends Notifier<DeviceConnectionState> {
       status: ConnectionStatus.connecting,
       device: device,
     );
-    _retryCount = 0;
     await _connectWithBackoff(device);
   }
 
@@ -135,37 +143,63 @@ class ConnectionNotifier extends Notifier<DeviceConnectionState> {
         _ => 'Could not connect to the device.',
       };
 
+  /// Attempts to connect, retrying transient failures with full-jitter
+  /// exponential backoff.
+  ///
+  /// A loop rather than recursion: the previous version recursed once per
+  /// retry, grew the stack, and shared a single mutable _retryCount across any
+  /// number of concurrent chains. ConnectivityService synthesises a
+  /// restore event on every foreground resume, so concurrent chains were
+  /// routine, not exotic.
   Future<void> _connectWithBackoff(Device device) async {
-    try {
-      _controller = _makeController(device);
-      await _controller!.connect();
-      await _persistence.saveDevice(device);
-      _watchHealth(_controller!, device);
+    final epoch = ++_attemptEpoch;
 
-      state = DeviceConnectionState(
-        status: ConnectionStatus.connected,
-        device: device,
-      );
-      _retryCount = 0;
-      log.d('ConnectionNotifier: Successfully connected to ${device.name}');
-    } catch (e, s) {
-      if (_isRetryable(e) && _retryCount < _maxRetries) {
-        final delay = _retryDelays[_retryCount];
-        log.w('ConnectionNotifier: Connection failed, retrying in ${delay}s '
-            '(Attempt ${_retryCount + 1}/$_maxRetries) — $e');
-        _retryCount++;
-        await Future.delayed(Duration(seconds: delay));
-        await _connectWithBackoff(device);
-      } else {
-        log.e('ConnectionNotifier: Connection to ${device.name} failed', e, s);
+    for (var attempt = 0; attempt <= _maxRetries; attempt++) {
+      if (_isSuperseded(epoch)) return;
+
+      try {
+        final controller = _makeController(device);
+        _controller = controller;
+        await controller.connect();
+        await _persistence.saveDevice(device);
+
+        if (_isSuperseded(epoch)) return;
+        _watchHealth(controller, device);
         state = DeviceConnectionState(
-          status: ConnectionStatus.error,
+          status: ConnectionStatus.connected,
           device: device,
-          errorMessage: _userMessage(e),
+        );
+        log.d('ConnectionNotifier: Successfully connected to ${device.name}');
+        return;
+      } catch (e, s) {
+        final lastAttempt = attempt == _maxRetries;
+        if (!_isRetryable(e) || lastAttempt) {
+          log.e('ConnectionNotifier: Connection to ${device.name} failed', e, s);
+          if (_isSuperseded(epoch)) return;
+          state = DeviceConnectionState(
+            status: ConnectionStatus.error,
+            device: device,
+            errorMessage: _userMessage(e),
+          );
+          return;
+        }
+
+        // Full jitter (AWS "Exponential Backoff and Jitter"): a delay drawn
+        // from [0, ceiling] rather than the ceiling itself, so retries from
+        // multiple clients do not re-synchronise.
+        final ceiling = _baseDelay * (1 << attempt);
+        log.w('ConnectionNotifier: attempt ${attempt + 1}/$_maxRetries for '
+            '${device.name} failed, backing off - $e');
+        await Future<void>.delayed(
+          Duration(milliseconds: _rng.nextInt(ceiling.inMilliseconds + 1)),
         );
       }
     }
   }
+
+  /// True when this chain must stop touching state: either the notifier is
+  /// gone, or a newer connect attempt has taken over.
+  bool _isSuperseded(int epoch) => _disposed || epoch != _attemptEpoch;
 
   /// Reflect transport-initiated session loss in app state.
   ///

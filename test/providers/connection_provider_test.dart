@@ -104,6 +104,74 @@ void main() {
       });
     });
 
+    test('disposing mid-retry does not write to a dead notifier', () {
+      fakeAsync((async) {
+        final fake = FakeController(
+          connectError: const SocketException('no route to host'),
+        );
+        final container = containerWith(fake);
+
+        container.read(connectionProvider.notifier).connect(testDevice);
+        async.flushMicrotasks();
+
+        // The user navigates away during the backoff window. ref.onDispose
+        // cancelled the connectivity subscription but nothing cancelled the
+        // in-flight retry chain, so the next `state =` hit a disposed
+        // Notifier and threw StateError.
+        container.dispose();
+
+        expect(
+          () => async.elapse(const Duration(seconds: 30)),
+          returnsNormally,
+          reason: 'a superseded chain must not touch state after dispose',
+        );
+      });
+    });
+
+    test('a newer connect supersedes an in-flight retry chain', () {
+      fakeAsync((async) {
+        const unreachable = Device(
+          id: 'unreachable',
+          name: 'Unplugged TV',
+          type: DeviceType.roku,
+          model: 'Ultra',
+          ip: '192.168.1.99',
+        );
+        final failing = FakeController(
+          connectError: const SocketException('no route to host'),
+        );
+        final healthy = FakeController();
+
+        final container = ProviderContainer(
+          overrides: [
+            devicePersistenceProvider.overrideWithValue(mockPersistence),
+            connectivityServiceProvider.overrideWithValue(mockConnectivity),
+            deviceControllerFactoryProvider.overrideWithValue(
+              (device) => device.id == unreachable.id ? failing : healthy,
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        final notifier = container.read(connectionProvider.notifier);
+
+        // Chain 1 starts retrying an unreachable TV.
+        notifier.connect(unreachable);
+        async.flushMicrotasks();
+
+        // The user picks a different, working TV while chain 1 is sleeping.
+        // Both chains previously ran concurrently sharing one _retryCount, and
+        // chain 1 eventually overwrote the good state with its own failure.
+        notifier.connect(testDevice);
+        async.elapse(const Duration(seconds: 60));
+
+        expect(container.read(connectionProvider).status,
+            ConnectionStatus.connected,
+            reason: 'a superseded chain must not overwrite a newer result');
+        expect(container.read(connectionProvider).device, testDevice);
+      });
+    });
+
     test('surfaces a readable message, not a raw exception toString', () {
       fakeAsync((async) {
         final container = containerWith(FakeController(
