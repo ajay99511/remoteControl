@@ -171,6 +171,33 @@ void main() {
       });
     });
 
+    test('holds a session for 10 minutes while the TV answers', () {
+      fakeAsync((async) {
+        final inbound = StreamController<dynamic>();
+        when(mockChannel.stream).thenAnswer((_) => inbound.stream);
+        when(mockPersistence.loadSamsungToken(any)).thenAnswer((_) async => 'token');
+
+        controller.connect();
+        async.flushMicrotasks();
+
+        // Phase 1 exit gate, virtual-clock form: 20 heartbeat cycles. Before
+        // the C-1 fix the session died on the first one, at T+35s.
+        for (var minute = 0; minute < 20; minute++) {
+          async.elapse(const Duration(seconds: 30));
+          inbound.add('pong');
+          async.flushMicrotasks();
+          expect(
+            controller.isConnected,
+            isTrue,
+            reason: 'session dropped during heartbeat cycle $minute',
+          );
+        }
+
+        verify(mockSink.add('ping')).called(20);
+        inbound.close();
+      });
+    });
+
     test('a non-JSON frame does not tear down the stream', () {
       fakeAsync((async) {
         final inbound = StreamController<dynamic>();
