@@ -5,6 +5,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../core/app_logger.dart';
 import '../models/app_id.dart';
+import '../models/command_result.dart';
 import '../models/remote_key.dart';
 import '../services/device_persistence_service.dart';
 import 'device_controller.dart';
@@ -146,14 +147,14 @@ class LgController implements DeviceController {
   bool get isConnected => _connected;
 
   @override
-  Future<void> sendKey(RemoteKey key) async {
-    if (!_connected || _channel == null) return;
+  Set<RemoteKey> get supportedKeys => _ssapUris.keys.toSet();
+
+  @override
+  Future<CommandResult> sendKey(RemoteKey key) async {
+    if (!_connected || _channel == null) return const CommandNotConnected();
 
     final uri = _ssapUris[key];
-    if (uri == null) {
-      log.d('LgController: Key ${key.name} not supported on LG.');
-      return;
-    }
+    if (uri == null) return CommandUnsupported(key.name);
 
     final payload = {
       "type": "request",
@@ -163,33 +164,37 @@ class LgController implements DeviceController {
 
     try {
       _channel!.sink.add(jsonEncode(payload));
-    } catch (e) {
-      log.e('LgController: Failed to send key ${key.name}', e);
+      return const CommandSent();
+    } catch (e, s) {
+      log.e('LgController: Failed to send key ${key.name}', e, s);
+      return CommandFailed(e, s);
     }
   }
 
   @override
-  Future<void> sendText(String text) async {
-    if (!_connected || _channel == null) return;
-    // LG text input is complex via SSAP, typically uses com.webos.service.ime/insertText
+  Future<CommandResult> sendText(String text) async {
+    if (!_connected || _channel == null) return const CommandNotConnected();
     final payload = {
       "type": "request",
       "id": "request_text",
       "uri": "ssap://com.webos.service.ime/insertText",
       "payload": {"text": text, "replace": 0}
     };
-    _channel!.sink.add(jsonEncode(payload));
+    try {
+      _channel!.sink.add(jsonEncode(payload));
+      return const CommandSent();
+    } catch (e, s) {
+      log.e('LgController: Failed to send text', e, s);
+      return CommandFailed(e, s);
+    }
   }
 
   @override
-  Future<void> launchApp(AppId appId) async {
-    if (!_connected || _channel == null) return;
+  Future<CommandResult> launchApp(AppId appId) async {
+    if (!_connected || _channel == null) return const CommandNotConnected();
 
     final lgAppId = _appIds[appId];
-    if (lgAppId == null) {
-      log.w('LgController: App ${appId.name} not found in mapping.');
-      return;
-    }
+    if (lgAppId == null) return CommandUnsupported(appId.displayName);
 
     final payload = {
       "type": "request",
@@ -201,8 +206,10 @@ class LgController implements DeviceController {
     try {
       _channel!.sink.add(jsonEncode(payload));
       log.d('LgController: Launched app ${appId.name} ($lgAppId)');
-    } catch (e) {
-      log.e('LgController: Failed to launch ${appId.name}', e);
+      return const CommandSent();
+    } catch (e, s) {
+      log.e('LgController: Failed to launch ${appId.name}', e, s);
+      return CommandFailed(e, s);
     }
   }
 

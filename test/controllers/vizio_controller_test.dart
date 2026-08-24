@@ -5,6 +5,7 @@ import 'package:mockito/mockito.dart';
 
 import 'package:devicecontroller/controllers/vizio_controller.dart';
 import 'package:devicecontroller/exceptions/pairing_required_exception.dart';
+import 'package:devicecontroller/models/command_result.dart';
 import 'package:devicecontroller/models/remote_key.dart';
 import 'package:devicecontroller/services/device_persistence_service.dart';
 
@@ -87,13 +88,29 @@ void main() {
     });
   });
 
-  group('VizioController.sendKey', () {
-    test('is a no-op while unconnected', () async {
-      await controller.sendKey(RemoteKey.volumeUp);
+  group('VizioController commands', () {
+    test('reports not-connected instead of returning silently', () async {
+      final result = await controller.sendKey(RemoteKey.volumeUp);
 
+      expect(result, isA<CommandNotConnected>());
       verifyNever(
         mockClient.put(any, headers: anyNamed('headers'), body: anyNamed('body')),
       );
+    });
+
+    test('reports text entry as unsupported on this API', () async {
+      // SmartCast exposes no text endpoint. This previously logged at debug
+      // and returned, which the caller could not distinguish from success.
+      expect(await controller.sendText('search'), isA<CommandUnsupported>());
+    });
+
+    test('reports an unmapped key as unsupported once connected', () async {
+      when(mockClient.get(any, headers: anyNamed('headers')))
+          .thenAnswer((_) async => http.Response('{}', 200));
+      await controller.connect();
+
+      expect(await controller.sendKey(RemoteKey.sleep),
+          isA<CommandUnsupported>());
     });
   });
 }

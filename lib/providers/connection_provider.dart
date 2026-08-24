@@ -18,6 +18,7 @@ import '../exceptions/certificate_pin_mismatch_exception.dart';
 import '../exceptions/pairing_required_exception.dart';
 import '../exceptions/unsupported_device_exception.dart';
 import '../models/app_id.dart';
+import '../models/command_result.dart';
 import '../models/device.dart';
 import '../models/remote_key.dart';
 import '../services/connectivity_service.dart';
@@ -177,33 +178,51 @@ class ConnectionNotifier extends Notifier<DeviceConnectionState> {
     state = const DeviceConnectionState();
   }
 
+  /// Keys the active transport can actually deliver.
+  Set<RemoteKey> get supportedKeys => _controller?.supportedKeys ?? const {};
+
   /// Send a remote-control key press to the connected device.
-  Future<void> sendKey(RemoteKey key) async {
-    if (_controller == null || !_controller!.isConnected) return;
-    try {
-      await _controller!.sendKey(key);
-    } catch (e) {
-      log.e('ConnectionNotifier: sendKey failed', e);
-    }
-  }
+  Future<CommandResult> sendKey(RemoteKey key) =>
+      _run('sendKey ${key.name}', (c) => c.sendKey(key));
 
   /// Send text input to the connected device.
-  Future<void> sendText(String text) async {
-    if (_controller == null || !_controller!.isConnected) return;
-    try {
-      await _controller!.sendText(text);
-    } catch (e) {
-      log.e('ConnectionNotifier: sendText failed', e);
-    }
-  }
+  Future<CommandResult> sendText(String text) =>
+      _run('sendText', (c) => c.sendText(text));
 
   /// Launch a specific app on the connected device.
-  Future<void> launchApp(AppId appId) async {
-    if (_controller == null || !_controller!.isConnected) return;
+  Future<CommandResult> launchApp(AppId appId) =>
+      _run('launchApp ${appId.name}', (c) => c.launchApp(appId));
+
+  /// Runs one command and reports the outcome instead of swallowing it.
+  ///
+  /// A failure also moves the session into the error state, so a transport
+  /// that has died stops presenting itself as connected.
+  Future<CommandResult> _run(
+    String label,
+    Future<CommandResult> Function(DeviceController) action,
+  ) async {
+    final controller = _controller;
+    if (controller == null || !controller.isConnected) {
+      return const CommandNotConnected();
+    }
     try {
-      await _controller!.launchApp(appId);
-    } catch (e) {
-      log.e('ConnectionNotifier: launchApp failed', e);
+      final result = await action(controller);
+      if (result is CommandFailed) {
+        log.e('ConnectionNotifier: $label failed', result.cause,
+            result.stackTrace);
+        state = state.copyWith(
+          status: ConnectionStatus.error,
+          errorMessage: _userMessage(result.cause),
+        );
+      }
+      return result;
+    } catch (e, s) {
+      log.e('ConnectionNotifier: $label threw', e, s);
+      state = state.copyWith(
+        status: ConnectionStatus.error,
+        errorMessage: _userMessage(e),
+      );
+      return CommandFailed(e, s);
     }
   }
 

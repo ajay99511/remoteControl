@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import '../core/app_logger.dart';
 import '../exceptions/pairing_required_exception.dart';
 import '../models/app_id.dart';
+import '../models/command_result.dart';
 import '../models/remote_key.dart';
 import '../services/device_persistence_service.dart';
 import 'device_controller.dart';
@@ -76,14 +77,14 @@ class VizioController implements DeviceController {
   bool get isConnected => _connected;
 
   @override
-  Future<void> sendKey(RemoteKey key) async {
-    if (!_connected) return;
+  Set<RemoteKey> get supportedKeys => _keyMap.keys.toSet();
+
+  @override
+  Future<CommandResult> sendKey(RemoteKey key) async {
+    if (!_connected) return const CommandNotConnected();
 
     final mapping = _keyMap[key];
-    if (mapping == null) {
-      log.d('VizioController: Key ${key.name} not supported on Vizio.');
-      return;
-    }
+    if (mapping == null) return CommandUnsupported(key.name);
 
     final payload = {
       "KEYLIST": [
@@ -104,23 +105,24 @@ class VizioController implements DeviceController {
         },
         body: jsonEncode(payload),
       ).timeout(const Duration(seconds: 3));
-    } catch (e) {
-      log.e('VizioController: Failed to send key ${key.name}', e);
+      return const CommandSent();
+    } catch (e, s) {
+      log.e('VizioController: Failed to send key ${key.name}', e, s);
+      return CommandFailed(e, s);
     }
   }
 
   @override
-  Future<void> sendText(String text) async {
-    // Vizio SmartCast doesn't support direct text input via this API easily.
-    log.d('VizioController: sendText not supported.');
-  }
+  Future<CommandResult> sendText(String text) async =>
+      // SmartCast exposes no text-entry endpoint on this API.
+      const CommandUnsupported('text entry');
 
   @override
-  Future<void> launchApp(AppId appId) async {
-    if (!_connected) return;
-    
-    // Vizio app launching is complex and requires specific payloads.
-    log.d('VizioController: launchApp ${appId.name} called (stub).');
+  Future<CommandResult> launchApp(AppId appId) async {
+    if (!_connected) return const CommandNotConnected();
+    // SmartCast app launch needs per-app payloads this controller does not
+    // carry yet. Reported as unsupported rather than logged and forgotten.
+    return CommandUnsupported(appId.displayName);
   }
 
   static const Map<RemoteKey, Map<String, int>> _keyMap = {

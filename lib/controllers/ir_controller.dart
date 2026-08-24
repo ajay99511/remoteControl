@@ -1,6 +1,6 @@
-import '../core/app_logger.dart';
 import '../exceptions/unsupported_device_exception.dart';
 import '../models/app_id.dart';
+import '../models/command_result.dart';
 import '../models/device.dart';
 import '../models/remote_key.dart';
 import 'device_controller.dart';
@@ -30,28 +30,24 @@ class IrController implements DeviceController {
   }
 
   @override
-  Future<void> sendKey(RemoteKey key) async {
-    if (!_connected) return;
+  Set<RemoteKey> get supportedKeys =>
+      _irDatabase[brand.toLowerCase()]?.keys.toSet() ?? const {};
 
-    final code = _irDatabase[brand.toLowerCase()]?[key];
-    if (code == null) {
-      log.d('IrController: Key ${key.name} not found in IR database for $brand.');
-      return;
-    }
-
-    log.d('IrController: Transmitting IR code for ${key.name} (${brand.toUpperCase()})');
-    // Platform channel call would go here.
+  @override
+  Future<CommandResult> sendKey(RemoteKey key) async {
+    // connect() always throws, so this is unreachable in practice. Kept
+    // honest rather than pretending: there is no transmitter behind it.
+    if (!_connected) return const CommandNotConnected();
+    return CommandUnsupported(key.name);
   }
 
   @override
-  Future<void> sendText(String text) async {
-    // IR doesn't support text input.
-  }
+  Future<CommandResult> sendText(String text) async =>
+      const CommandUnsupported('text entry');
 
   @override
-  Future<void> launchApp(AppId appId) async {
-    // IR doesn't support app launching.
-  }
+  Future<CommandResult> launchApp(AppId appId) async =>
+      CommandUnsupported(appId.displayName);
 
   @override
   bool get isConnected => _connected;

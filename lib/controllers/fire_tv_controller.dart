@@ -1,5 +1,6 @@
 import '../exceptions/unsupported_device_exception.dart';
 import '../models/app_id.dart';
+import '../models/command_result.dart';
 import '../models/device.dart';
 import '../models/remote_key.dart';
 import 'device_controller.dart';
@@ -14,16 +15,19 @@ class FireTvController implements DeviceController {
   Future<void> disconnect() async {}
 
   @override
-  Future<void> sendKey(RemoteKey key) async =>
-      throw UnsupportedDeviceException(DeviceType.fireTv);
+  Set<RemoteKey> get supportedKeys => const {};
 
   @override
-  Future<void> sendText(String text) async =>
-      throw UnsupportedDeviceException(DeviceType.fireTv);
+  Future<CommandResult> sendKey(RemoteKey key) async =>
+      CommandUnsupported(key.name);
 
   @override
-  Future<void> launchApp(AppId appId) async =>
-      throw UnsupportedDeviceException(DeviceType.fireTv);
+  Future<CommandResult> sendText(String text) async =>
+      const CommandUnsupported('text entry');
+
+  @override
+  Future<CommandResult> launchApp(AppId appId) async =>
+      CommandUnsupported(appId.displayName);
 
   @override
   bool get isConnected => false;

@@ -8,6 +8,7 @@ import 'package:mockito/mockito.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import 'package:devicecontroller/controllers/lg_controller.dart';
+import 'package:devicecontroller/models/command_result.dart';
 import 'package:devicecontroller/models/remote_key.dart';
 import 'package:devicecontroller/services/device_persistence_service.dart';
 
@@ -141,15 +142,20 @@ void main() {
       fakeAsync((async) {
         final inbound = connectAndRegister(async);
 
+        final results = <CommandResult>[];
         for (final key in [
           RemoteKey.up,
           RemoteKey.down,
           RemoteKey.left,
           RemoteKey.right,
         ]) {
-          controller.sendKey(key);
+          controller.sendKey(key).then(results.add);
         }
         async.flushMicrotasks();
+
+        expect(results, hasLength(4));
+        expect(results, everyElement(isA<CommandUnsupported>()),
+            reason: 'the UI must be told, not left to assume success');
 
         final frames = verify(mockSink.add(captureAny)).captured
             .whereType<String>()

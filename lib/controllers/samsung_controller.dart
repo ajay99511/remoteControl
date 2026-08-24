@@ -9,6 +9,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import '../core/app_logger.dart';
 import '../exceptions/certificate_pin_mismatch_exception.dart';
 import '../models/app_id.dart';
+import '../models/command_result.dart';
 import '../models/remote_key.dart';
 import '../services/device_persistence_service.dart';
 import 'device_controller.dart';
@@ -285,14 +286,14 @@ class SamsungController implements DeviceController {
   bool get isConnected => _connected;
 
   @override
-  Future<void> sendKey(RemoteKey key) async {
-    if (!_connected || _channel == null) return;
+  Set<RemoteKey> get supportedKeys => _keyMap.keys.toSet();
+
+  @override
+  Future<CommandResult> sendKey(RemoteKey key) async {
+    if (!_connected || _channel == null) return const CommandNotConnected();
 
     final samsungKey = _keyMap[key];
-    if (samsungKey == null) {
-      log.d('SamsungController: Key ${key.name} not supported on Samsung.');
-      return;
-    }
+    if (samsungKey == null) return CommandUnsupported(key.name);
 
     final payload = {
       "method": "ms.remote.control",
@@ -306,14 +307,16 @@ class SamsungController implements DeviceController {
 
     try {
       _channel!.sink.add(jsonEncode(payload));
-    } catch (e) {
-      log.e('SamsungController: Failed to send key $samsungKey', e);
+      return const CommandSent();
+    } catch (e, s) {
+      log.e('SamsungController: Failed to send key $samsungKey', e, s);
+      return CommandFailed(e, s);
     }
   }
 
   @override
-  Future<void> sendText(String text) async {
-    if (!_connected || _channel == null) return;
+  Future<CommandResult> sendText(String text) async {
+    if (!_connected || _channel == null) return const CommandNotConnected();
 
     // Truncate to 500 chars (Requirement 2.3)
     final safeText = text.length > 500 ? text.substring(0, 500) : text;
@@ -332,20 +335,19 @@ class SamsungController implements DeviceController {
     try {
       _channel!.sink.add(jsonEncode(payload));
       log.d('SamsungController: Sent text input');
-    } catch (e) {
-      log.e('SamsungController: Failed to send text', e);
+      return const CommandSent();
+    } catch (e, s) {
+      log.e('SamsungController: Failed to send text', e, s);
+      return CommandFailed(e, s);
     }
   }
 
   @override
-  Future<void> launchApp(AppId appId) async {
-    if (!_connected || _channel == null) return;
+  Future<CommandResult> launchApp(AppId appId) async {
+    if (!_connected || _channel == null) return const CommandNotConnected();
 
     final samsungAppId = _appIds[appId];
-    if (samsungAppId == null) {
-      log.w('SamsungController: App ${appId.name} not found in mapping.');
-      return;
-    }
+    if (samsungAppId == null) return CommandUnsupported(appId.displayName);
 
     final payload = {
       "method": "ms.channel.emit",
@@ -362,8 +364,10 @@ class SamsungController implements DeviceController {
     try {
       _channel!.sink.add(jsonEncode(payload));
       log.d('SamsungController: Launched app ${appId.name} ($samsungAppId)');
-    } catch (e) {
-      log.e('SamsungController: Failed to launch ${appId.name}', e);
+      return const CommandSent();
+    } catch (e, s) {
+      log.e('SamsungController: Failed to launch ${appId.name}', e, s);
+      return CommandFailed(e, s);
     }
   }
 }
