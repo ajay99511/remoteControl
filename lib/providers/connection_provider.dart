@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -13,6 +14,8 @@ import '../controllers/roku_controller.dart';
 import '../controllers/samsung_controller.dart';
 import '../controllers/vizio_controller.dart';
 import '../core/app_logger.dart';
+import '../exceptions/certificate_pin_mismatch_exception.dart';
+import '../exceptions/pairing_required_exception.dart';
 import '../exceptions/unsupported_device_exception.dart';
 import '../models/app_id.dart';
 import '../models/device.dart';
@@ -107,31 +110,56 @@ class ConnectionNotifier extends Notifier<DeviceConnectionState> {
     await _connectWithBackoff(device);
   }
 
+  /// Whether another attempt could plausibly succeed.
+  ///
+  /// These three are deterministic and permanent: the device type has no
+  /// implementation, the certificate contradicts its pin, or the TV wants a
+  /// pairing code. Retrying any of them produces the identical failure four
+  /// more times while the user waits 15 seconds for news we already had.
+  static bool _isRetryable(Object e) =>
+      e is! UnsupportedDeviceException &&
+      e is! CertificatePinMismatchException &&
+      e is! PairingRequiredException;
+
+  /// A message safe to put in front of a user: no stack frames, no exception
+  /// class names, and an action to take where one exists.
+  static String _userMessage(Object e) => switch (e) {
+        UnsupportedDeviceException() => e.message,
+        CertificatePinMismatchException() => e.message,
+        PairingRequiredException() => e.message,
+        TimeoutException() =>
+          'The device did not respond. Check that it is powered on and on '
+              'this Wi-Fi network.',
+        SocketException() => 'Could not reach the device on this network.',
+        _ => 'Could not connect to the device.',
+      };
+
   Future<void> _connectWithBackoff(Device device) async {
     try {
       _controller = _buildController(device);
       await _controller!.connect();
       await _persistence.saveDevice(device);
-      
+
       state = DeviceConnectionState(
         status: ConnectionStatus.connected,
         device: device,
       );
       _retryCount = 0;
       log.d('ConnectionNotifier: Successfully connected to ${device.name}');
-    } catch (e) {
-      if (_retryCount < _maxRetries) {
+    } catch (e, s) {
+      if (_isRetryable(e) && _retryCount < _maxRetries) {
         final delay = _retryDelays[_retryCount];
-        log.w('ConnectionNotifier: Connection failed, retrying in ${delay}s (Attempt ${_retryCount + 1}/$_maxRetries) — $e');
+        log.w('ConnectionNotifier: Connection failed, retrying in ${delay}s '
+            '(Attempt ${_retryCount + 1}/$_maxRetries) — $e');
         _retryCount++;
         await Future.delayed(Duration(seconds: delay));
         await _connectWithBackoff(device);
       } else {
-        log.e('ConnectionNotifier: Connection failed after $_maxRetries retries', e);
+        log.e('ConnectionNotifier: Connection to ${device.name} failed', e, s);
         state = DeviceConnectionState(
           status: ConnectionStatus.error,
           device: device,
-          errorMessage: e.toString(),
+          errorMessage: _userMessage(e),
         );
       }
     }

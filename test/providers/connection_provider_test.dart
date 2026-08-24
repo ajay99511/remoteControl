@@ -108,6 +108,54 @@ void main() {
       });
     });
 
+    test('an unsupported device fails at once instead of retrying', () {
+      fakeAsync((async) {
+        final notifier = container.read(connectionProvider.notifier);
+        final fireTv = Device(
+          id: 'firetv-1',
+          name: 'Fire TV Stick',
+          type: DeviceType.fireTv,
+          model: 'stick',
+          signal: 100,
+          ip: '192.168.1.9',
+        );
+
+        notifier.connect(fireTv);
+        async.flushMicrotasks();
+
+        // UnsupportedDeviceException is deterministic and permanent. Retrying
+        // it burned 1+2+4+8 = 15s before telling the user what was already
+        // known at the first attempt.
+        expect(
+          container.read(connectionProvider).status,
+          ConnectionStatus.error,
+          reason: 'a permanent error must not be retried',
+        );
+        expect(async.pendingTimers, isEmpty,
+            reason: 'no backoff timer should have been scheduled');
+      });
+    });
+
+    test('surfaces a readable message, not a raw exception toString', () {
+      fakeAsync((async) {
+        final notifier = container.read(connectionProvider.notifier);
+        notifier.connect(Device(
+          id: 'googletv-1',
+          name: 'Chromecast',
+          type: DeviceType.googleTv,
+          model: 'gtv',
+          signal: 100,
+          ip: '192.168.1.11',
+        ));
+        async.flushMicrotasks();
+
+        final message = container.read(connectionProvider).errorMessage;
+        expect(message, isNotNull);
+        expect(message, isNot(contains('Exception')));
+        expect(message, isNot(contains('#0')));
+      });
+    });
+
     test('disconnect() clears persistence', () async {
       final notifier = container.read(connectionProvider.notifier);
       await notifier.disconnect();
