@@ -159,7 +159,6 @@ class ScannerNotifier extends Notifier<ScannerState> {
       name: name,
       type: deviceType,
       model: type.replaceAll('._tcp', '').replaceAll('_', ''),
-      signal: 100,
       ip: ip,
       port: resolvedPort,
     );
@@ -268,7 +267,6 @@ class ScannerNotifier extends Notifier<ScannerState> {
       name: name,
       type: deviceType,
       model: 'SSDP Discovered',
-      signal: 100,
       ip: ip,
       port: port,
     );

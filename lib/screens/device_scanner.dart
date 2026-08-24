@@ -72,16 +72,6 @@ class _DeviceScannerScreenState extends ConsumerState<DeviceScannerScreen> {
                 color: Colors.indigoAccent.withValues(alpha: 0.15),
               ),
             ),
-            /*
-            .animate(
-              onPlay: (controller) => controller.repeat(reverse: true),
-            )
-            .scale(
-              duration: 4.seconds,
-              begin: const Offset(1, 1),
-              end: const Offset(1.2, 1.2),
-            ),
-            */
           ),
           Positioned(
             bottom: -50,
@@ -94,16 +84,6 @@ class _DeviceScannerScreenState extends ConsumerState<DeviceScannerScreen> {
                 color: Colors.purpleAccent.withValues(alpha: 0.15),
               ),
             ),
-            /*
-            .animate(
-              onPlay: (controller) => controller.repeat(reverse: true),
-            )
-            .scale(
-              duration: 5.seconds,
-              begin: const Offset(1, 1),
-              end: const Offset(1.3, 1.3),
-            ),
-            */
           ),
           // Blur Layer
           BackdropFilter(

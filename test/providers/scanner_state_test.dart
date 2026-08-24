@@ -24,7 +24,6 @@ void main() {
           name: 'Roku',
           type: DeviceType.roku,
           model: 'x',
-          signal: 100,
         ),
       ]);
 

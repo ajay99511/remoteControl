@@ -23,7 +23,6 @@ void main() {
     name: 'Test Device',
     type: DeviceType.roku,
     model: 'Test',
-    signal: 100,
     ip: '127.0.0.1',
   );
 
@@ -50,9 +49,9 @@ void main() {
     test('auto-reconnects on build if device saved', () async {
       when(mockPersistence.loadDevice()).thenAnswer((_) async => testDevice);
       
-      // Access the provider to trigger build
-      final notifier = container.read(connectionProvider.notifier);
-      
+      // Read the provider to trigger build().
+      container.read(connectionProvider.notifier);
+
       await Future.delayed(const Duration(milliseconds: 100));
       expect(container.read(connectionProvider).device, testDevice);
     });
@@ -61,9 +60,7 @@ void main() {
       final connectivityStream = StreamController<List<ConnectivityResult>>();
       when(mockConnectivity.onConnectivityChanged).thenAnswer((_) => connectivityStream.stream);
       
-      final notifier = container.read(connectionProvider.notifier);
-      
-      // Simulate error state with a device
+      // Simulate error state with a device.
       container.read(connectionProvider.notifier).connect(testDevice);
       await Future.delayed(const Duration(milliseconds: 100));
 
@@ -94,7 +91,6 @@ void main() {
           name: 'Bad Device',
           type: DeviceType.roku,
           model: 'Bad',
-          signal: 100,
           ip: '0.0.0.0', // Should fail
         );
 
@@ -116,7 +112,6 @@ void main() {
           name: 'Fire TV Stick',
           type: DeviceType.fireTv,
           model: 'stick',
-          signal: 100,
           ip: '192.168.1.9',
         );
 
@@ -144,7 +139,6 @@ void main() {
           name: 'Chromecast',
           type: DeviceType.googleTv,
           model: 'gtv',
-          signal: 100,
           ip: '192.168.1.11',
         ));
         async.flushMicrotasks();

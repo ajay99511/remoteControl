@@ -60,7 +60,6 @@ class Device {
   final String name;
   final DeviceType type;
   final String model;
-  final int signal;
   final String? ip;
   final int? port;
 
@@ -69,7 +68,6 @@ class Device {
     required this.name,
     required this.type,
     required this.model,
-    required this.signal,
     this.ip,
     this.port,
   });
@@ -79,7 +77,6 @@ class Device {
         'name': name,
         'type': type.toJson(),
         'model': model,
-        'signal': signal,
         'ip': ip,
         'port': port,
       };
@@ -89,7 +86,6 @@ class Device {
         name: json['name'] as String,
         type: DeviceType.fromString(json['type'] as String? ?? 'unknown'),
         model: json['model'] as String,
-        signal: json['signal'] as int,
         ip: json['ip'] as String?,
         port: json['port'] as int?,
       );
@@ -99,7 +95,6 @@ class Device {
     String? name,
     DeviceType? type,
     String? model,
-    int? signal,
     String? ip,
     int? port,
   }) =>
@@ -108,7 +103,6 @@ class Device {
         name: name ?? this.name,
         type: type ?? this.type,
         model: model ?? this.model,
-        signal: signal ?? this.signal,
         ip: ip ?? this.ip,
         port: port ?? this.port,
       );
@@ -122,12 +116,11 @@ class Device {
           name == other.name &&
           type == other.type &&
           model == other.model &&
-          signal == other.signal &&
           ip == other.ip &&
           port == other.port;
 
   @override
-  int get hashCode => Object.hash(id, name, type, model, signal, ip, port);
+  int get hashCode => Object.hash(id, name, type, model, ip, port);
 
   @override
   String toString() =>

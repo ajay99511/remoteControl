@@ -83,7 +83,6 @@ class _ManualConnectDialogState extends State<ManualConnectDialog> {
         name: 'Manual ${_selectedType.name.toUpperCase()}',
         type: _selectedType,
         model: 'Custom IP',
-        signal: 100,
         ip: _ipController.text.trim(),
         port: port,
       ),
