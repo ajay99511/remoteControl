@@ -368,9 +368,14 @@ class _DeviceScannerScreenState extends ConsumerState<DeviceScannerScreen> {
               child: _buildActionButton(
                 icon: LucideIcons.refreshCw,
                 label: 'Rescan',
-                onTap: () {
-                  ref.read(scannerProvider.notifier).stopScan();
-                  ref.read(scannerProvider.notifier).startScan();
+                onTap: () async {
+                  // stopScan is async: not awaiting it let startScan append
+                  // new Discovery handles while the previous teardown was
+                  // still in flight, orphaning them past the next stopScan.
+                  final notifier = ref.read(scannerProvider.notifier);
+                  await notifier.stopScan();
+                  if (!context.mounted) return;
+                  await notifier.startScan();
                 },
                 isPrimary: true,
               ),
