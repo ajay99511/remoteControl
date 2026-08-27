@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 
 import '../models/app_id.dart';
+import '../models/command_result.dart';
 import '../models/device.dart';
 import '../models/remote_key.dart';
 import '../providers/connection_provider.dart';
@@ -58,15 +59,56 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen>
     super.dispose();
   }
 
-  void _sendKey(RemoteKey key) {
-    ref.read(connectionProvider.notifier).sendKey(key);
-    HapticFeedback.lightImpact();
+  /// Reports the outcome of one command.
+  ///
+  /// The haptic is deliberately here and not in the button widgets: those
+  /// buzzed on tap regardless of what happened, so the app gave positive
+  /// tactile confirmation of commands that were never transmitted.
+  void _report(CommandResult result, String label) {
+    if (!mounted) return;
+    switch (result) {
+      case CommandSent():
+        HapticFeedback.lightImpact();
+      case CommandUnsupported(:final what):
+        _showMessage('$what is not available on this TV');
+      case CommandNotConnected():
+        _showMessage('Not connected to ${widget.device.name}');
+      case CommandFailed():
+        HapticFeedback.heavyImpact();
+        _showMessage('$label failed to reach the TV');
+    }
   }
 
-  void _sendPower() {
-    // Fire-and-forget, no local state tracking (Requirement 2.25)
-    _sendKey(RemoteKey.power);
+  void _showMessage(String message, {VoidCallback? onRetry}) {
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(message),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: const Color(0xFF27272A),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        duration: const Duration(seconds: 3),
+        action: onRetry == null
+            ? null
+            : SnackBarAction(
+                label: 'Retry',
+                textColor: Colors.indigoAccent,
+                onPressed: onRetry,
+              ),
+      ),
+    );
+  }
+
+  Future<void> _sendKey(RemoteKey key) async {
+    final result = await ref.read(connectionProvider.notifier).sendKey(key);
+    _report(result, key.name);
+  }
+
+  Future<void> _sendPower() async {
     HapticFeedback.mediumImpact();
+    await _sendKey(RemoteKey.power);
   }
 
   void _toggleKeyboard() {
@@ -80,26 +122,42 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen>
     }
   }
 
-  void _sendText(String text) {
+  Future<void> _sendText(String text) async {
     if (text.isEmpty) return;
-    ref.read(connectionProvider.notifier).sendText(text);
-    HapticFeedback.lightImpact();
-    _keyboardController.clear();
-    setState(() {
-      showKeyboard = false;
-    });
-    _keyboardFocus.unfocus();
+    final result = await ref.read(connectionProvider.notifier).sendText(text);
+    if (!mounted) return;
+    _report(result, 'Text entry');
+
+    // Only clear the field and dismiss once the text actually landed;
+    // discarding input the TV never received loses the user's typing.
+    if (result.isSuccess) {
+      _keyboardController.clear();
+      setState(() => showKeyboard = false);
+      _keyboardFocus.unfocus();
+    }
   }
 
-  void _launchApp(AppId appId) {
-    ref.read(connectionProvider.notifier).launchApp(appId);
-    HapticFeedback.mediumImpact();
+  Future<void> _launchApp(AppId appId) async {
+    final result = await ref.read(connectionProvider.notifier).launchApp(appId);
+    _report(result, appId.displayName);
   }
 
   @override
   Widget build(BuildContext context) {
     final connection = ref.watch(connectionProvider);
     final isConnected = connection.status == ConnectionStatus.connected;
+
+    // The screen where every user action happens previously had no error
+    // state at all: it rendered identically whether commands worked or not.
+    ref.listen(connectionProvider, (previous, next) {
+      if (next.status != ConnectionStatus.error) return;
+      if (previous?.errorMessage == next.errorMessage) return;
+      _showMessage(
+        next.errorMessage ?? 'Lost connection to ${widget.device.name}',
+        onRetry: () =>
+            ref.read(connectionProvider.notifier).connect(widget.device),
+      );
+    });
 
     return Scaffold(
       backgroundColor: const Color(0xFF09090B),
@@ -690,9 +748,11 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen>
                       color: Colors.white.withValues(alpha: 0.03),
                       borderRadius: BorderRadius.circular(20),
                       child: InkWell(
-                        onTap: () {
-                          ref.read(connectionProvider.notifier).sendText(num);
-                          HapticFeedback.lightImpact();
+                        onTap: () async {
+                          final result = await ref
+                              .read(connectionProvider.notifier)
+                              .sendText(num);
+                          _report(result, 'Number $num');
                         },
                         borderRadius: BorderRadius.circular(20),
                         splashColor: Colors.indigoAccent.withValues(alpha: 0.2),
