@@ -2,11 +2,11 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:crypto/crypto.dart';
 import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../core/app_logger.dart';
+import '../core/certificate_pinning.dart';
 import '../exceptions/certificate_pin_mismatch_exception.dart';
 import '../models/app_id.dart';
 import '../models/command_result.dart';
@@ -14,31 +14,6 @@ import '../models/remote_key.dart';
 import '../services/device_persistence_service.dart';
 import 'controller_health.dart';
 import 'device_controller.dart';
-
-/// Outcome of comparing a presented certificate against the pinned one.
-enum CertificateVerdict {
-  /// No pin recorded yet: trust this certificate and remember it.
-  pinNew,
-
-  /// Presented fingerprint matches the pin.
-  trusted,
-
-  /// Presented fingerprint contradicts the pin. Refuse, and do not downgrade.
-  rejected,
-}
-
-/// The Trust-On-First-Use decision, kept pure so the security rule is testable
-/// without a socket. [stored] is the pin from secure storage, [presented] the
-/// SHA-256 of the certificate the device just offered.
-CertificateVerdict verifyFingerprint({
-  required String? stored,
-  required String presented,
-}) {
-  if (stored == null) return CertificateVerdict.pinNew;
-  return stored == presented
-      ? CertificateVerdict.trusted
-      : CertificateVerdict.rejected;
-}
 
 /// Concrete [DeviceController] for Samsung Smart TVs (Tizen).
 class SamsungController with HealthReporting implements DeviceController {
@@ -163,55 +138,26 @@ class SamsungController with HealthReporting implements DeviceController {
   /// contradicts the pin recorded on first use. The caller must not fall back
   /// to plaintext on that exception.
   Future<void> _connectSecure(Uri wssUrl) async {
-    final storedFingerprint = await _persistence.loadCertFingerprint(host);
-    CertificateVerdict? verdict;
-    String? presented;
+    final pinning = PinningSession(
+      host: host,
+      stored: await _persistence.loadCertFingerprint(host),
+    );
 
-    final httpClient = HttpClient()
-      ..badCertificateCallback = (cert, certHost, certPort) {
-        presented = sha256.convert(cert.der).toString();
-        verdict = verifyFingerprint(
-          stored: storedFingerprint,
-          presented: presented!,
-        );
-        switch (verdict!) {
-          case CertificateVerdict.pinNew:
-            log.i('SamsungController: pinning new certificate for $host');
-            return true;
-          case CertificateVerdict.trusted:
-            return true;
-          case CertificateVerdict.rejected:
-            log.e(
-              'SamsungController: TOFU mismatch for $host - refusing connection',
-            );
-            return false;
-        }
-      };
-
-    // Ownership transfers to _channel below and _handleDisconnect closes it;
-    // the lint cannot follow that hand-off.
+    // Ownership of the socket transfers to _channel below, and
+    // _handleDisconnect closes it; the lint cannot follow that hand-off.
     // ignore: close_sinks
     final WebSocket socket;
     try {
       socket = await WebSocket.connect(
         wssUrl.toString(),
-        customClient: httpClient,
+        customClient: pinning.createClient(),
       ).timeout(_connectTimeout);
     } catch (e) {
-      // Distinguish "we refused this certificate" from "the TV has no TLS".
-      // Both surface as a HandshakeException, and conflating them is what
-      // made the pin unenforceable.
-      if (verdict == CertificateVerdict.rejected) {
-        throw CertificatePinMismatchException(host);
-      }
+      if (pinning.wasRejected) throw CertificatePinMismatchException(host);
       rethrow;
     }
 
-    // Commit the pin only once the handshake has actually succeeded, and await
-    // it so a storage failure is not silently dropped.
-    if (verdict == CertificateVerdict.pinNew && presented != null) {
-      await _persistence.saveCertFingerprint(host, presented!);
-    }
+    await pinning.commit(_persistence);
 
     _channel = IOWebSocketChannel(socket);
     _onConnected('wss:$_securePort');

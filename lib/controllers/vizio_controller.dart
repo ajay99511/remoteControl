@@ -2,8 +2,11 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
+import 'package:http/io_client.dart';
 
 import '../core/app_logger.dart';
+import '../core/certificate_pinning.dart';
+import '../exceptions/certificate_pin_mismatch_exception.dart';
 import '../exceptions/pairing_required_exception.dart';
 import '../models/app_id.dart';
 import '../models/command_result.dart';
@@ -16,7 +19,12 @@ import 'device_controller.dart';
 class VizioController with HealthReporting implements DeviceController {
   final String host;
   final int port;
-  final http.Client _client;
+
+  /// Non-null only when a test injected one. Production builds a pinned
+  /// client at connect time, because the pin has to be read from storage
+  /// first and that is async.
+  final http.Client? _injectedClient;
+  http.Client? _client;
 
   bool _connected = false;
   String? _authToken;
@@ -29,24 +37,37 @@ class VizioController with HealthReporting implements DeviceController {
     this.port = 7345,
     http.Client? client,
   }) : _persistence = persistence,
-       _client = client ?? http.Client();
+       _injectedClient = client,
+       _client = client;
 
   Uri _smartCastUri(String path) => Uri.parse('https://$host:$port/$path');
 
   @override
   Future<void> connect() async {
+    // SmartCast serves HTTPS on 7345 with a self-signed certificate, which
+    // the default client rejects outright - so connect() used to throw
+    // HandshakeException before any of the status handling below ever ran.
+    // Pin it on first use, the same way Samsung does.
+    final pinning = PinningSession(
+      host: host,
+      stored: await _persistence.loadCertFingerprint(host),
+    );
+    _client = _injectedClient ?? IOClient(pinning.createClient());
+
     try {
       // Use the token from a previous pairing, if any. This storage API
       // existed but had no caller, so _authToken was permanently null and the
       // AUTH header was never sent.
       _authToken = await _persistence.loadVizioToken(host);
 
-      final response = await _client
+      final response = await _client!
           .get(
             _smartCastUri('state/device/info'),
             headers: {'AUTH': ?_authToken},
           )
           .timeout(const Duration(seconds: 3));
+
+      await pinning.commit(_persistence);
 
       switch (response.statusCode) {
         case 200:
@@ -64,6 +85,10 @@ class VizioController with HealthReporting implements DeviceController {
       }
     } catch (e) {
       _connected = false;
+      if (pinning.wasRejected) {
+        log.e('VizioController: refusing $host on a changed certificate');
+        throw CertificatePinMismatchException(host);
+      }
       log.e('VizioController: Vizio not reachable at $host', e);
       rethrow;
     }
@@ -101,7 +126,7 @@ class VizioController with HealthReporting implements DeviceController {
     };
 
     try {
-      await _client
+      await _client!
           .put(
             _smartCastUri('key_command/'),
             headers: {'Content-Type': 'application/json', 'AUTH': ?_authToken},

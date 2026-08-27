@@ -7,6 +7,7 @@ import 'package:mockito/mockito.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import 'package:devicecontroller/controllers/controller_health.dart';
+import 'package:devicecontroller/core/certificate_pinning.dart';
 import 'package:devicecontroller/controllers/samsung_controller.dart';
 import 'package:devicecontroller/exceptions/certificate_pin_mismatch_exception.dart';
 import 'package:devicecontroller/models/remote_key.dart';

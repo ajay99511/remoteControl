@@ -22,6 +22,9 @@ void main() {
     mockClient = MockClient();
     mockPersistence = MockDevicePersistenceService();
     when(mockPersistence.loadVizioToken(any)).thenAnswer((_) async => null);
+    when(
+      mockPersistence.loadCertFingerprint(any),
+    ).thenAnswer((_) async => null);
 
     controller = VizioController(
       host: host,
