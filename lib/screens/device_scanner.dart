@@ -410,62 +410,67 @@ class _DeviceScannerScreenState extends ConsumerState<DeviceScannerScreen> {
           ),
         ],
       ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(20),
-          highlightColor: Colors.white.withValues(alpha: 0.05),
-          splashColor: Colors.indigoAccent.withValues(alpha: 0.2),
-          onTap: () => ref.read(connectionProvider.notifier).connect(device),
-          child: Padding(
-            padding: const EdgeInsets.all(20.0),
-            child: Row(
-              children: [
-                Container(
-                  width: 56,
-                  height: 56,
-                  decoration: BoxDecoration(
-                    color: _deviceColor(device.type).withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: _deviceColor(device.type).withValues(alpha: 0.5),
+      child: Semantics(
+        label: '${device.name}, ${device.type.name} device, ${device.model}',
+        hint: 'Connect to this device',
+        button: true,
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(20),
+            highlightColor: Colors.white.withValues(alpha: 0.05),
+            splashColor: Colors.indigoAccent.withValues(alpha: 0.2),
+            onTap: () => ref.read(connectionProvider.notifier).connect(device),
+            child: Padding(
+              padding: const EdgeInsets.all(20.0),
+              child: Row(
+                children: [
+                  Container(
+                    width: 56,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      color: _deviceColor(device.type).withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: _deviceColor(device.type).withValues(alpha: 0.5),
+                      ),
+                    ),
+                    child: Icon(
+                      _deviceIcon(device.type),
+                      color: _deviceColor(device.type),
+                      size: 28,
                     ),
                   ),
-                  child: Icon(
-                    _deviceIcon(device.type),
-                    color: _deviceColor(device.type),
-                    size: 28,
-                  ),
-                ),
-                const SizedBox(width: 20),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        device.name,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
+                  const SizedBox(width: 20),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          device.name,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        device.model,
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.6),
-                          fontSize: 13,
+                        const SizedBox(height: 4),
+                        Text(
+                          device.model,
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.6),
+                            fontSize: 13,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-                Icon(
-                  LucideIcons.chevronRight,
-                  color: Colors.white.withValues(alpha: 0.3),
-                ),
-              ],
+                  Icon(
+                    LucideIcons.chevronRight,
+                    color: Colors.white.withValues(alpha: 0.3),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -521,41 +526,45 @@ class _DeviceScannerScreenState extends ConsumerState<DeviceScannerScreen> {
     required VoidCallback onTap,
     required bool isPrimary,
   }) {
-    return Material(
-      color: isPrimary
-          ? Colors.indigoAccent
-          : Colors.white.withValues(alpha: 0.05),
-      borderRadius: BorderRadius.circular(16),
-      child: InkWell(
-        onTap: onTap,
+    return Semantics(
+      label: label,
+      button: true,
+      child: Material(
+        color: isPrimary
+            ? Colors.indigoAccent
+            : Colors.white.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(16),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            border: isPrimary
-                ? null
-                : Border.all(color: Colors.white.withValues(alpha: 0.1)),
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                icon,
-                size: 20,
-                color: isPrimary ? Colors.white : Colors.white70,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                label,
-                style: TextStyle(
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              border: isPrimary
+                  ? null
+                  : Border.all(color: Colors.white.withValues(alpha: 0.1)),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  icon,
+                  size: 20,
                   color: isPrimary ? Colors.white : Colors.white70,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
                 ),
-              ),
-            ],
+                const SizedBox(width: 8),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: isPrimary ? Colors.white : Colors.white70,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
