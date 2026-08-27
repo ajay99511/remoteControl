@@ -33,12 +33,11 @@ class ScannerState {
     List<Device>? devices,
     String? error,
     bool clearError = false,
-  }) =>
-      ScannerState(
-        isScanning: isScanning ?? this.isScanning,
-        devices: devices ?? this.devices,
-        error: clearError ? null : (error ?? this.error),
-      );
+  }) => ScannerState(
+    isScanning: isScanning ?? this.isScanning,
+    devices: devices ?? this.devices,
+    error: clearError ? null : (error ?? this.error),
+  );
 }
 
 /// Binds the UDP socket the SSDP probe listens on.
@@ -48,7 +47,8 @@ class ScannerState {
 typedef DatagramSocketBinder = Future<RawDatagramSocket> Function();
 
 final ssdpSocketBinderProvider = Provider<DatagramSocketBinder>(
-  (_) => () => RawDatagramSocket.bind(InternetAddress.anyIPv4, 0),
+  (_) =>
+      () => RawDatagramSocket.bind(InternetAddress.anyIPv4, 0),
 );
 
 /// Whether to run mDNS/NSD discovery. Off on web and Windows, which nsd does
@@ -146,8 +146,10 @@ class ScannerNotifier extends Notifier<ScannerState> {
     try {
       if (_mdnsEnabled) {
         for (final type in serviceTypes) {
-          final discovery =
-              await startDiscovery(type, ipLookupType: IpLookupType.any);
+          final discovery = await startDiscovery(
+            type,
+            ipLookupType: IpLookupType.any,
+          );
           if (_disposed) {
             await stopDiscovery(discovery);
             return;
@@ -213,8 +215,10 @@ class ScannerNotifier extends Notifier<ScannerState> {
     final merged = mergeDiscovered(state.devices, device);
     if (identical(merged, state.devices)) return;
     state = state.copyWith(devices: merged);
-    log.d('ScannerNotifier: found "${device.name}" at ${device.ip}:'
-        '${device.port} (${device.type.name}) via $via');
+    log.d(
+      'ScannerNotifier: found "${device.name}" at ${device.ip}:'
+      '${device.port} (${device.type.name}) via $via',
+    );
   }
 
   Future<void> _startSsdpDiscovery() async {
@@ -227,7 +231,8 @@ class ScannerNotifier extends Notifier<ScannerState> {
       socket.broadcastEnabled = true;
       _ssdpSocket = socket;
 
-      const searchMessage = 'M-SEARCH * HTTP/1.1\r\n'
+      const searchMessage =
+          'M-SEARCH * HTTP/1.1\r\n'
           'HOST: $_ssdpMulticast:$_ssdpPort\r\n'
           'MAN: "ssdp:discover"\r\n'
           'MX: 3\r\n'

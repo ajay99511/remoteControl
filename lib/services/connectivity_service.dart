@@ -15,9 +15,7 @@ class ConnectivityService with WidgetsBindingObserver {
 
   ConnectivityService() {
     WidgetsBinding.instance.addObserver(this);
-    _sub = Connectivity()
-        .onConnectivityChanged
-        .listen(_controller.add);
+    _sub = Connectivity().onConnectivityChanged.listen(_controller.add);
   }
 
   @override

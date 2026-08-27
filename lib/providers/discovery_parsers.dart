@@ -136,7 +136,9 @@ List<Device> mergeDiscovered(List<Device> known, Device candidate) {
   final merged = existing.copyWith(
     type: existing.type == DeviceType.unknown ? candidate.type : existing.type,
     name: existing.name.isEmpty ? candidate.name : existing.name,
-    port: existing.type == DeviceType.unknown && candidate.type != DeviceType.unknown
+    port:
+        existing.type == DeviceType.unknown &&
+            candidate.type != DeviceType.unknown
         ? candidate.port
         : existing.port,
   );

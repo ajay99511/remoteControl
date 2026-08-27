@@ -12,10 +12,7 @@ void main() {
       // There is no MethodChannel and no ConsumerIrManager binding, so
       // reporting success here produced a "CONNECTED" remote that silently
       // transmitted nothing.
-      expect(
-        controller.connect(),
-        throwsA(isA<UnsupportedDeviceException>()),
-      );
+      expect(controller.connect(), throwsA(isA<UnsupportedDeviceException>()));
     });
 
     test('is never reported as connected', () async {

@@ -102,15 +102,15 @@ class _DeviceScannerScreenState extends ConsumerState<DeviceScannerScreen> {
                 children: [
                   const SizedBox(height: 32),
                   const Text(
-                    'Discover',
-                    style: TextStyle(
-                      fontSize: 40,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white,
-                      letterSpacing: -1,
-                    ),
-                    textAlign: TextAlign.center,
-                  )
+                        'Discover',
+                        style: TextStyle(
+                          fontSize: 40,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                          letterSpacing: -1,
+                        ),
+                        textAlign: TextAlign.center,
+                      )
                       .animate()
                       .fadeIn(duration: 500.ms)
                       .moveY(begin: -20, end: 0),
@@ -119,8 +119,8 @@ class _DeviceScannerScreenState extends ConsumerState<DeviceScannerScreen> {
                     scanner.isScanning
                         ? 'Looking for nearby smart devices...'
                         : scanner.devices.isEmpty
-                            ? 'No devices found'
-                            : '${scanner.devices.length} nearby device(s) found',
+                        ? 'No devices found'
+                        : '${scanner.devices.length} nearby device(s) found',
                     style: TextStyle(
                       color: Colors.white.withValues(alpha: 0.6),
                       fontSize: 16,
@@ -146,40 +146,40 @@ class _DeviceScannerScreenState extends ConsumerState<DeviceScannerScreen> {
                   ),
                   if (connection.status == ConnectionStatus.connecting)
                     Container(
-                      margin: const EdgeInsets.only(top: 24),
-                      padding: const EdgeInsets.symmetric(
-                        vertical: 16,
-                        horizontal: 24,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.05),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.1),
-                        ),
-                      ),
-                      child: const Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.indigoAccent,
+                          margin: const EdgeInsets.only(top: 24),
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 16,
+                            horizontal: 24,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.05),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.1),
                             ),
                           ),
-                          SizedBox(width: 16),
-                          Text(
-                            'Connecting to device...',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w500,
-                            ),
+                          child: const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.indigoAccent,
+                                ),
+                              ),
+                              SizedBox(width: 16),
+                              Text(
+                                'Connecting to device...',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
-                    )
+                        )
                         .animate()
                         .fadeIn(duration: 300.ms)
                         .slideY(begin: 0.2, end: 0),
@@ -202,16 +202,16 @@ class _DeviceScannerScreenState extends ConsumerState<DeviceScannerScreen> {
             alignment: Alignment.center,
             children: [
               Container(
-                width: 120,
-                height: 120,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: Colors.indigoAccent.withValues(alpha: 0.3),
-                    width: 2,
-                  ),
-                ),
-              )
+                    width: 120,
+                    height: 120,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: Colors.indigoAccent.withValues(alpha: 0.3),
+                        width: 2,
+                      ),
+                    ),
+                  )
                   .animate(onPlay: (controller) => controller.repeat())
                   .scale(
                     duration: 2.seconds,
@@ -220,16 +220,16 @@ class _DeviceScannerScreenState extends ConsumerState<DeviceScannerScreen> {
                   )
                   .fadeOut(duration: 2.seconds),
               Container(
-                width: 120,
-                height: 120,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: Colors.purpleAccent.withValues(alpha: 0.3),
-                    width: 2,
-                  ),
-                ),
-              )
+                    width: 120,
+                    height: 120,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: Colors.purpleAccent.withValues(alpha: 0.3),
+                        width: 2,
+                      ),
+                    ),
+                  )
                   .animate(
                     onPlay: (controller) => controller.repeat(),
                     delay: 600.ms,
@@ -274,14 +274,14 @@ class _DeviceScannerScreenState extends ConsumerState<DeviceScannerScreen> {
           ),
           const SizedBox(height: 40),
           const Text(
-            'Scanning Network...',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: Colors.white70,
-              letterSpacing: 2.0,
-            ),
-          )
+                'Scanning Network...',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white70,
+                  letterSpacing: 2.0,
+                ),
+              )
               .animate(onPlay: (controller) => controller.repeat(reverse: true))
               .fadeIn(duration: 1.seconds)
               .fadeOut(duration: 1.seconds),

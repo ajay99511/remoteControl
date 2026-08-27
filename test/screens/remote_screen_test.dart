@@ -41,8 +41,9 @@ void main() {
   setUp(() {
     persistence = MockDevicePersistenceService();
     connectivity = MockConnectivityService();
-    when(connectivity.onConnectivityChanged)
-        .thenAnswer((_) => const Stream.empty());
+    when(
+      connectivity.onConnectivityChanged,
+    ).thenAnswer((_) => const Stream.empty());
     when(persistence.loadDevice()).thenAnswer((_) async => null);
   });
 
@@ -98,8 +99,9 @@ void main() {
     await settle(tester);
   });
 
-  testWidgets('reports a key press that could not be delivered',
-      (tester) async {
+  testWidgets('reports a key press that could not be delivered', (
+    tester,
+  ) async {
     final controller = FakeController();
     await pumpRemote(tester, controller);
 
@@ -107,8 +109,9 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
 
     // Dismiss the connection-loss snackbar so the next one is unambiguous.
-    ScaffoldMessenger.of(tester.element(find.byType(RemoteScreen)))
-        .hideCurrentSnackBar();
+    ScaffoldMessenger.of(
+      tester.element(find.byType(RemoteScreen)),
+    ).hideCurrentSnackBar();
     await tester.pump();
 
     await tester.tap(find.widgetWithText(Column, 'BACK').first);

@@ -26,11 +26,13 @@ void main() {
     mockPersistence = MockDevicePersistenceService();
     mockChannel = MockWebSocketChannel();
     mockSink = MockWebSocketSink();
-    
+
     when(mockChannel.sink).thenReturn(mockSink);
-    when(mockChannel.stream).thenAnswer((_) => StreamController<dynamic>().stream);
+    when(
+      mockChannel.stream,
+    ).thenAnswer((_) => StreamController<dynamic>().stream);
     when(mockSink.close(any, any)).thenAnswer((_) async => null);
-    
+
     controller = SamsungController(
       host: host,
       persistence: mockPersistence,
@@ -77,29 +79,34 @@ void main() {
       final controllerStream = StreamController<dynamic>();
       when(mockChannel.stream).thenAnswer((_) => controllerStream.stream);
       when(mockPersistence.loadSamsungToken(any)).thenAnswer((_) async => null);
-      when(mockPersistence.loadCertFingerprint(any)).thenAnswer((_) async => null);
+      when(
+        mockPersistence.loadCertFingerprint(any),
+      ).thenAnswer((_) async => null);
 
       await controller.connect();
-      
+
       final connectMessage = jsonEncode({
         'event': 'ms.channel.connect',
-        'data': {'token': '12345'}
+        'data': {'token': '12345'},
       });
       controllerStream.add(connectMessage);
 
       await Future.delayed(const Duration(milliseconds: 100));
       verify(mockPersistence.saveSamsungToken(host, '12345')).called(1);
-      
+
       await controllerStream.close();
     });
 
     test('sendKey(RemoteKey.mute) sends KEY_MUTE payload', () async {
-      when(mockPersistence.loadSamsungToken(any)).thenAnswer((_) async => 'token');
+      when(
+        mockPersistence.loadSamsungToken(any),
+      ).thenAnswer((_) async => 'token');
       await controller.connect();
 
       await controller.sendKey(RemoteKey.mute);
 
-      final captured = verify(mockSink.add(captureAny)).captured.first as String;
+      final captured =
+          verify(mockSink.add(captureAny)).captured.first as String;
       final payload = jsonDecode(captured) as Map<String, dynamic>;
       final params = payload['params'] as Map<String, dynamic>;
       expect(payload['method'], 'ms.remote.control');
@@ -107,13 +114,16 @@ void main() {
     });
 
     test('sendText truncates to 500 chars', () async {
-      when(mockPersistence.loadSamsungToken(any)).thenAnswer((_) async => 'token');
+      when(
+        mockPersistence.loadSamsungToken(any),
+      ).thenAnswer((_) async => 'token');
       await controller.connect();
 
       final longText = 'x' * 600;
       await controller.sendText(longText);
 
-      final captured = verify(mockSink.add(captureAny)).captured.first as String;
+      final captured =
+          verify(mockSink.add(captureAny)).captured.first as String;
       final payload = jsonDecode(captured) as Map<String, dynamic>;
       final params = payload['params'] as Map<String, dynamic>;
       final decodedCmd = utf8.decode(base64Decode(params['Cmd'] as String));
@@ -122,7 +132,9 @@ void main() {
 
     test('heartbeat sends ping every 30s', () async {
       fakeAsync((async) {
-        when(mockPersistence.loadSamsungToken(any)).thenAnswer((_) async => 'token');
+        when(
+          mockPersistence.loadSamsungToken(any),
+        ).thenAnswer((_) async => 'token');
         controller.connect();
         async.flushMicrotasks();
 
@@ -133,13 +145,15 @@ void main() {
 
     test('pong timeout triggers disconnect after 5s', () async {
       fakeAsync((async) {
-        when(mockPersistence.loadSamsungToken(any)).thenAnswer((_) async => 'token');
+        when(
+          mockPersistence.loadSamsungToken(any),
+        ).thenAnswer((_) async => 'token');
         controller.connect();
         async.flushMicrotasks();
 
         async.elapse(const Duration(seconds: 30));
         verify(mockSink.add('ping')).called(1);
-        
+
         // No pong received, wait 5 more seconds
         async.elapse(const Duration(seconds: 5));
         expect(controller.isConnected, isFalse);
@@ -150,7 +164,9 @@ void main() {
       fakeAsync((async) {
         final inbound = StreamController<dynamic>();
         when(mockChannel.stream).thenAnswer((_) => inbound.stream);
-        when(mockPersistence.loadSamsungToken(any)).thenAnswer((_) async => 'token');
+        when(
+          mockPersistence.loadSamsungToken(any),
+        ).thenAnswer((_) async => 'token');
 
         controller.connect();
         async.flushMicrotasks();
@@ -177,7 +193,9 @@ void main() {
       fakeAsync((async) {
         final inbound = StreamController<dynamic>();
         when(mockChannel.stream).thenAnswer((_) => inbound.stream);
-        when(mockPersistence.loadSamsungToken(any)).thenAnswer((_) async => 'token');
+        when(
+          mockPersistence.loadSamsungToken(any),
+        ).thenAnswer((_) async => 'token');
 
         controller.connect();
         async.flushMicrotasks();
@@ -204,7 +222,9 @@ void main() {
       fakeAsync((async) {
         final inbound = StreamController<dynamic>();
         when(mockChannel.stream).thenAnswer((_) => inbound.stream);
-        when(mockPersistence.loadSamsungToken(any)).thenAnswer((_) async => 'token');
+        when(
+          mockPersistence.loadSamsungToken(any),
+        ).thenAnswer((_) async => 'token');
 
         controller.connect();
         async.flushMicrotasks();
@@ -230,7 +250,9 @@ void main() {
       fakeAsync((async) {
         final inbound = StreamController<dynamic>();
         when(mockChannel.stream).thenAnswer((_) => inbound.stream);
-        when(mockPersistence.loadSamsungToken(any)).thenAnswer((_) async => 'token');
+        when(
+          mockPersistence.loadSamsungToken(any),
+        ).thenAnswer((_) async => 'token');
 
         controller.connect();
         async.flushMicrotasks();

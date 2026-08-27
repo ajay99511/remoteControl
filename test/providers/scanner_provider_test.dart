@@ -12,11 +12,11 @@ void main() {
   /// A container whose network is entirely under the test's control: mDNS off,
   /// UDP socket faked. Nothing here touches the real network.
   ProviderContainer makeContainer() => ProviderContainer(
-        overrides: [
-          mdnsEnabledProvider.overrideWithValue(false),
-          ssdpSocketBinderProvider.overrideWithValue(() async => socket),
-        ],
-      );
+    overrides: [
+      mdnsEnabledProvider.overrideWithValue(false),
+      ssdpSocketBinderProvider.overrideWithValue(() async => socket),
+    ],
+  );
 
   setUp(() => socket = FakeDatagramSocket());
 
@@ -30,8 +30,11 @@ void main() {
         async.flushMicrotasks();
         async.elapse(const Duration(seconds: 2));
 
-        expect(socket.sent, hasLength(3),
-            reason: 'a single M-SEARCH is routinely dropped on Wi-Fi');
+        expect(
+          socket.sent,
+          hasLength(3),
+          reason: 'a single M-SEARCH is routinely dropped on Wi-Fi',
+        );
         expect(socket.broadcastEnabled, isTrue);
       });
     });

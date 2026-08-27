@@ -32,8 +32,9 @@ void main() {
 
   group('VizioController.connect', () {
     test('connects when the TV accepts the request', () async {
-      when(mockClient.get(any, headers: anyNamed('headers')))
-          .thenAnswer((_) async => http.Response('{}', 200));
+      when(
+        mockClient.get(any, headers: anyNamed('headers')),
+      ).thenAnswer((_) async => http.Response('{}', 200));
 
       await controller.connect();
 
@@ -41,8 +42,9 @@ void main() {
     });
 
     test('treats 401 as a pairing requirement, not a connection', () async {
-      when(mockClient.get(any, headers: anyNamed('headers')))
-          .thenAnswer((_) async => http.Response('', 401));
+      when(
+        mockClient.get(any, headers: anyNamed('headers')),
+      ).thenAnswer((_) async => http.Response('', 401));
 
       await expectLater(
         controller.connect(),
@@ -56,8 +58,9 @@ void main() {
     });
 
     test('treats 403 as a pairing requirement too', () async {
-      when(mockClient.get(any, headers: anyNamed('headers')))
-          .thenAnswer((_) async => http.Response('', 403));
+      when(
+        mockClient.get(any, headers: anyNamed('headers')),
+      ).thenAnswer((_) async => http.Response('', 403));
 
       await expectLater(
         controller.connect(),
@@ -66,22 +69,27 @@ void main() {
     });
 
     test('sends the stored auth token when one exists', () async {
-      when(mockPersistence.loadVizioToken(host))
-          .thenAnswer((_) async => 'stored-token');
-      when(mockClient.get(any, headers: anyNamed('headers')))
-          .thenAnswer((_) async => http.Response('{}', 200));
+      when(
+        mockPersistence.loadVizioToken(host),
+      ).thenAnswer((_) async => 'stored-token');
+      when(
+        mockClient.get(any, headers: anyNamed('headers')),
+      ).thenAnswer((_) async => http.Response('{}', 200));
 
       await controller.connect();
 
-      final headers = verify(
-        mockClient.get(any, headers: captureAnyNamed('headers')),
-      ).captured.single as Map<String, String>;
+      final headers =
+          verify(
+                mockClient.get(any, headers: captureAnyNamed('headers')),
+              ).captured.single
+              as Map<String, String>;
       expect(headers['AUTH'], 'stored-token');
     });
 
     test('surfaces an unexpected status rather than guessing', () async {
-      when(mockClient.get(any, headers: anyNamed('headers')))
-          .thenAnswer((_) async => http.Response('', 500));
+      when(
+        mockClient.get(any, headers: anyNamed('headers')),
+      ).thenAnswer((_) async => http.Response('', 500));
 
       await expectLater(controller.connect(), throwsA(isA<Exception>()));
       expect(controller.isConnected, isFalse);
@@ -94,7 +102,11 @@ void main() {
 
       expect(result, isA<CommandNotConnected>());
       verifyNever(
-        mockClient.put(any, headers: anyNamed('headers'), body: anyNamed('body')),
+        mockClient.put(
+          any,
+          headers: anyNamed('headers'),
+          body: anyNamed('body'),
+        ),
       );
     });
 
@@ -105,12 +117,15 @@ void main() {
     });
 
     test('reports an unmapped key as unsupported once connected', () async {
-      when(mockClient.get(any, headers: anyNamed('headers')))
-          .thenAnswer((_) async => http.Response('{}', 200));
+      when(
+        mockClient.get(any, headers: anyNamed('headers')),
+      ).thenAnswer((_) async => http.Response('{}', 200));
       await controller.connect();
 
-      expect(await controller.sendKey(RemoteKey.sleep),
-          isA<CommandUnsupported>());
+      expect(
+        await controller.sendKey(RemoteKey.sleep),
+        isA<CommandUnsupported>(),
+      );
     });
   });
 }

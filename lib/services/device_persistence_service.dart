@@ -17,7 +17,7 @@ class DevicePersistenceService {
   final FlutterSecureStorage _storage;
 
   DevicePersistenceService({FlutterSecureStorage? storage})
-      : _storage = storage ?? const FlutterSecureStorage();
+    : _storage = storage ?? const FlutterSecureStorage();
 
   // ── Device persistence ──────────────────────────────────────────────────
 

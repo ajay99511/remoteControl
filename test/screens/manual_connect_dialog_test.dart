@@ -59,34 +59,41 @@ void main() {
       expect(validateManualHost('999.1.1.1'), isNotNull);
     });
 
-    test('reports empty input without shouting at a user who has not typed', () {
-      expect(validateManualHost(''), isNotNull);
-    });
+    test(
+      'reports empty input without shouting at a user who has not typed',
+      () {
+        expect(validateManualHost(''), isNotNull);
+      },
+    );
   });
 
   group('ManualConnectDialog', () {
-    testWidgets('keeps the caret in the port field while the IP field is edited',
-        (tester) async {
-      await showAndCapture(tester, (tester) async {
-        await tester.enterText(portField(), '9999');
-        await tester.pump();
+    testWidgets(
+      'keeps the caret in the port field while the IP field is edited',
+      (tester) async {
+        await showAndCapture(tester, (tester) async {
+          await tester.enterText(portField(), '9999');
+          await tester.pump();
 
-        // Typing here used to hand the port field a brand-new controller on
-        // every keystroke, whose selection defaulted to invalid - so the caret
-        // jumped out of the field mid-entry.
-        await tester.enterText(ipField(), '192.168.1.50');
-        await tester.pump();
+          // Typing here used to hand the port field a brand-new controller on
+          // every keystroke, whose selection defaulted to invalid - so the caret
+          // jumped out of the field mid-entry.
+          await tester.enterText(ipField(), '192.168.1.50');
+          await tester.pump();
 
-        final selection =
-            tester.widget<TextField>(portField()).controller!.selection;
-        expect(portText(tester), '9999');
-        expect(
-          selection.isValid,
-          isTrue,
-          reason: 'a rebuild must not discard the caret position',
-        );
-      });
-    });
+          final selection = tester
+              .widget<TextField>(portField())
+              .controller!
+              .selection;
+          expect(portText(tester), '9999');
+          expect(
+            selection.isValid,
+            isTrue,
+            reason: 'a rebuild must not discard the caret position',
+          );
+        });
+      },
+    );
 
     testWidgets('a cleared port field stays cleared', (tester) async {
       await showAndCapture(tester, (tester) async {
@@ -103,8 +110,9 @@ void main() {
       });
     });
 
-    testWidgets('refuses to submit a port outside the valid range',
-        (tester) async {
+    testWidgets('refuses to submit a port outside the valid range', (
+      tester,
+    ) async {
       final device = await showAndCapture(tester, (tester) async {
         await tester.enterText(ipField(), '192.168.1.50');
         await tester.pump();
@@ -118,8 +126,9 @@ void main() {
       expect(find.textContaining('Port must be'), findsOneWidget);
     });
 
-    testWidgets('applies the default port when the device type changes',
-        (tester) async {
+    testWidgets('applies the default port when the device type changes', (
+      tester,
+    ) async {
       await showAndCapture(tester, (tester) async {
         expect(portText(tester), '${kDefaultPorts[DeviceType.roku]}');
 
@@ -132,12 +141,13 @@ void main() {
       });
     });
 
-    testWidgets('keeps Connect disabled until the address parses',
-        (tester) async {
+    testWidgets('keeps Connect disabled until the address parses', (
+      tester,
+    ) async {
       await showAndCapture(tester, (tester) async {
         ElevatedButton connectButton() => tester.widget<ElevatedButton>(
-              find.widgetWithText(ElevatedButton, 'Connect'),
-            );
+          find.widgetWithText(ElevatedButton, 'Connect'),
+        );
 
         expect(connectButton().onPressed, isNull);
 

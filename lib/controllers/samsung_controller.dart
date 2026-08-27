@@ -58,8 +58,8 @@ class SamsungController with HealthReporting implements DeviceController {
     this.port = 8001,
     required DevicePersistenceService persistence,
     WebSocketChannel Function(Uri)? channelFactory,
-  })  : _persistence = persistence,
-        _channelFactory = channelFactory;
+  }) : _persistence = persistence,
+       _channelFactory = channelFactory;
 
   static const Map<RemoteKey, String> _keyMap = {
     RemoteKey.up: 'KEY_UP',
@@ -221,7 +221,7 @@ class SamsungController with HealthReporting implements DeviceController {
     _connected = true;
     log.d('SamsungController: Connected to $host via $protocol');
     reportHealth(ControllerHealth.connected);
-    
+
     _channel!.stream.listen(
       (message) {
         // Any inbound frame proves liveness, so clear the pong deadline before
@@ -365,10 +365,7 @@ class SamsungController with HealthReporting implements DeviceController {
       "params": {
         "event": "ed.apps.launch",
         "to": "host",
-        "data": {
-          "appId": samsungAppId,
-          "action_type": "DEEP_LINK",
-        },
+        "data": {"appId": samsungAppId, "action_type": "DEEP_LINK"},
       },
     };
 

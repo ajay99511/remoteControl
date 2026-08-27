@@ -39,12 +39,11 @@ class DeviceConnectionState {
     Device? device,
     String? errorMessage,
     bool clearError = false,
-  }) =>
-      DeviceConnectionState(
-        status: status ?? this.status,
-        device: device ?? this.device,
-        errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
-      );
+  }) => DeviceConnectionState(
+    status: status ?? this.status,
+    device: device ?? this.device,
+    errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
+  );
 }
 
 /// Riverpod [Notifier] that manages the connection to a selected device.
@@ -72,9 +71,11 @@ class ConnectionNotifier extends Notifier<DeviceConnectionState> {
     _persistence = ref.read(devicePersistenceProvider);
     _connectivity = ref.read(connectivityServiceProvider);
     _makeController = ref.read(deviceControllerFactoryProvider);
-    
-    _connectivitySub = _connectivity.onConnectivityChanged.listen(_onConnectivityChanged);
-    
+
+    _connectivitySub = _connectivity.onConnectivityChanged.listen(
+      _onConnectivityChanged,
+    );
+
     ref.onDispose(() {
       _disposed = true;
       _connectivitySub?.cancel();
@@ -90,7 +91,9 @@ class ConnectionNotifier extends Notifier<DeviceConnectionState> {
   Future<void> _tryAutoReconnect() async {
     final saved = await _persistence.loadDevice();
     if (saved != null) {
-      log.d('ConnectionNotifier: Found saved device ${saved.name}, attempting auto-reconnect');
+      log.d(
+        'ConnectionNotifier: Found saved device ${saved.name}, attempting auto-reconnect',
+      );
       await connect(saved);
     }
   }
@@ -133,15 +136,15 @@ class ConnectionNotifier extends Notifier<DeviceConnectionState> {
   /// A message safe to put in front of a user: no stack frames, no exception
   /// class names, and an action to take where one exists.
   static String _userMessage(Object e) => switch (e) {
-        UnsupportedDeviceException() => e.message,
-        CertificatePinMismatchException() => e.message,
-        PairingRequiredException() => e.message,
-        TimeoutException() =>
-          'The device did not respond. Check that it is powered on and on '
-              'this Wi-Fi network.',
-        SocketException() => 'Could not reach the device on this network.',
-        _ => 'Could not connect to the device.',
-      };
+    UnsupportedDeviceException() => e.message,
+    CertificatePinMismatchException() => e.message,
+    PairingRequiredException() => e.message,
+    TimeoutException() =>
+      'The device did not respond. Check that it is powered on and on '
+          'this Wi-Fi network.',
+    SocketException() => 'Could not reach the device on this network.',
+    _ => 'Could not connect to the device.',
+  };
 
   /// Attempts to connect, retrying transient failures with full-jitter
   /// exponential backoff.
@@ -174,7 +177,11 @@ class ConnectionNotifier extends Notifier<DeviceConnectionState> {
       } catch (e, s) {
         final lastAttempt = attempt == _maxRetries;
         if (!_isRetryable(e) || lastAttempt) {
-          log.e('ConnectionNotifier: Connection to ${device.name} failed', e, s);
+          log.e(
+            'ConnectionNotifier: Connection to ${device.name} failed',
+            e,
+            s,
+          );
           if (_isSuperseded(epoch)) return;
           state = DeviceConnectionState(
             status: ConnectionStatus.error,
@@ -188,8 +195,10 @@ class ConnectionNotifier extends Notifier<DeviceConnectionState> {
         // from [0, ceiling] rather than the ceiling itself, so retries from
         // multiple clients do not re-synchronise.
         final ceiling = _baseDelay * (1 << attempt);
-        log.w('ConnectionNotifier: attempt ${attempt + 1}/$_maxRetries for '
-            '${device.name} failed, backing off - $e');
+        log.w(
+          'ConnectionNotifier: attempt ${attempt + 1}/$_maxRetries for '
+          '${device.name} failed, backing off - $e',
+        );
         await Future<void>.delayed(
           Duration(milliseconds: _rng.nextInt(ceiling.inMilliseconds + 1)),
         );
@@ -265,8 +274,11 @@ class ConnectionNotifier extends Notifier<DeviceConnectionState> {
     try {
       final result = await action(controller);
       if (result is CommandFailed) {
-        log.e('ConnectionNotifier: $label failed', result.cause,
-            result.stackTrace);
+        log.e(
+          'ConnectionNotifier: $label failed',
+          result.cause,
+          result.stackTrace,
+        );
         state = state.copyWith(
           status: ConnectionStatus.error,
           errorMessage: _userMessage(result.cause),
@@ -282,7 +294,6 @@ class ConnectionNotifier extends Notifier<DeviceConnectionState> {
       return CommandFailed(e, s);
     }
   }
-
 }
 
 /// Global provider for the device connection.

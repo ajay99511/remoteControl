@@ -122,7 +122,9 @@ class RokuController with HealthReporting implements DeviceController {
   Future<CommandResult> sendText(String text) async {
     if (!_connected) return const CommandNotConnected();
     if (text.length > _maxTextLength) {
-      log.w('RokuController: truncating ${text.length} chars to $_maxTextLength');
+      log.w(
+        'RokuController: truncating ${text.length} chars to $_maxTextLength',
+      );
       text = text.substring(0, _maxTextLength);
     }
     final runes = text.runes.toList();

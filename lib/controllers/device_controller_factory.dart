@@ -27,24 +27,24 @@ DeviceController buildDeviceController(
 ) {
   return switch (device.type) {
     DeviceType.roku => RokuController(
-        host: _requireHost(device),
-        port: device.port ?? kDefaultPorts[DeviceType.roku]!,
-      ),
+      host: _requireHost(device),
+      port: device.port ?? kDefaultPorts[DeviceType.roku]!,
+    ),
     DeviceType.samsung => SamsungController(
-        host: _requireHost(device),
-        port: device.port ?? kDefaultPorts[DeviceType.samsung]!,
-        persistence: persistence,
-      ),
+      host: _requireHost(device),
+      port: device.port ?? kDefaultPorts[DeviceType.samsung]!,
+      persistence: persistence,
+    ),
     DeviceType.lg => LgController(
-        host: _requireHost(device),
-        port: device.port ?? kDefaultPorts[DeviceType.lg]!,
-        persistence: persistence,
-      ),
+      host: _requireHost(device),
+      port: device.port ?? kDefaultPorts[DeviceType.lg]!,
+      persistence: persistence,
+    ),
     DeviceType.vizio => VizioController(
-        host: _requireHost(device),
-        port: device.port ?? kDefaultPorts[DeviceType.vizio]!,
-        persistence: persistence,
-      ),
+      host: _requireHost(device),
+      port: device.port ?? kDefaultPorts[DeviceType.vizio]!,
+      persistence: persistence,
+    ),
     DeviceType.fireTv => FireTvController(),
     DeviceType.googleTv => GoogleTvController(),
     DeviceType.ir => IrController(brand: device.model),
@@ -67,7 +67,9 @@ String _requireHost(Device device) {
   return host;
 }
 
-final deviceControllerFactoryProvider = Provider<DeviceControllerFactory>((ref) {
+final deviceControllerFactoryProvider = Provider<DeviceControllerFactory>((
+  ref,
+) {
   final persistence = ref.watch(devicePersistenceProvider);
   return (device) => buildDeviceController(device, persistence);
 });

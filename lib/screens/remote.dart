@@ -108,8 +108,9 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen>
   }
 
   Future<void> _sendPower() async {
-    final result =
-        await ref.read(connectionProvider.notifier).sendKey(RemoteKey.power);
+    final result = await ref
+        .read(connectionProvider.notifier)
+        .sendKey(RemoteKey.power);
     if (result.isSuccess) unawaited(HapticFeedback.mediumImpact());
     _report(result, 'Power');
   }
@@ -309,10 +310,7 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen>
             ),
             child: IconButton(
               tooltip: 'Power Off',
-              icon: const Icon(
-                LucideIcons.power,
-                color: Colors.redAccent,
-              ),
+              icon: const Icon(LucideIcons.power, color: Colors.redAccent),
               onPressed: _sendPower,
             ),
           ),
@@ -459,7 +457,9 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen>
                                   ),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: Colors.black.withValues(alpha: 0.5),
+                                      color: Colors.black.withValues(
+                                        alpha: 0.5,
+                                      ),
                                       blurRadius: 10,
                                       offset: const Offset(0, 5),
                                     ),
@@ -567,7 +567,12 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen>
     );
   }
 
-  Widget _buildDPadSegment(RemoteKey key, IconData icon, EdgeInsets padding, String label) {
+  Widget _buildDPadSegment(
+    RemoteKey key,
+    IconData icon,
+    EdgeInsets padding,
+    String label,
+  ) {
     return Semantics(
       label: label,
       button: true,
@@ -617,18 +622,27 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen>
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     Icon(
-                                      _pendingDirection == RemoteKey.up ? LucideIcons.chevronUp :
-                                      _pendingDirection == RemoteKey.down ? LucideIcons.chevronDown :
-                                      _pendingDirection == RemoteKey.left ? LucideIcons.chevronLeft :
-                                      _pendingDirection == RemoteKey.right ? LucideIcons.chevronRight :
-                                      LucideIcons.mousePointer2,
+                                      _pendingDirection == RemoteKey.up
+                                          ? LucideIcons.chevronUp
+                                          : _pendingDirection == RemoteKey.down
+                                          ? LucideIcons.chevronDown
+                                          : _pendingDirection == RemoteKey.left
+                                          ? LucideIcons.chevronLeft
+                                          : _pendingDirection == RemoteKey.right
+                                          ? LucideIcons.chevronRight
+                                          : LucideIcons.mousePointer2,
                                       size: 80,
-                                      color: _pendingDirection != null ? Colors.indigoAccent : Colors.white.withValues(alpha: 0.1),
+                                      color: _pendingDirection != null
+                                          ? Colors.indigoAccent
+                                          : Colors.white.withValues(alpha: 0.1),
                                     ),
                                     if (_pendingDirection != null)
                                       Text(
                                         _pendingDirection!.name.toUpperCase(),
-                                        style: const TextStyle(color: Colors.indigoAccent, fontWeight: FontWeight.bold),
+                                        style: const TextStyle(
+                                          color: Colors.indigoAccent,
+                                          fontWeight: FontWeight.bold,
+                                        ),
                                       ).animate().fadeIn(),
                                   ],
                                 ),
@@ -662,9 +676,13 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen>
                                 final dy = _touchpadDelta.dy.abs();
                                 if (dx > 30 || dy > 30) {
                                   if (dx > dy) {
-                                    _pendingDirection = _touchpadDelta.dx > 0 ? RemoteKey.right : RemoteKey.left;
+                                    _pendingDirection = _touchpadDelta.dx > 0
+                                        ? RemoteKey.right
+                                        : RemoteKey.left;
                                   } else {
-                                    _pendingDirection = _touchpadDelta.dy > 0 ? RemoteKey.down : RemoteKey.up;
+                                    _pendingDirection = _touchpadDelta.dy > 0
+                                        ? RemoteKey.down
+                                        : RemoteKey.up;
                                   }
                                 }
                               });
@@ -745,9 +763,9 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen>
               final num = nums[index];
               if (num.isEmpty) return const SizedBox();
               return Semantics(
-                label: 'Number $num',
-                button: true,
-                child: Material(
+                    label: 'Number $num',
+                    button: true,
+                    child: Material(
                       color: Colors.white.withValues(alpha: 0.03),
                       borderRadius: BorderRadius.circular(20),
                       child: InkWell(
@@ -785,7 +803,7 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen>
                         ),
                       ),
                     ),
-              )
+                  )
                   .animate()
                   .fadeIn(delay: (index * 20).ms, duration: 300.ms)
                   .slideY(begin: 0.1, end: 0);

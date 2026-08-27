@@ -18,14 +18,16 @@ void main() {
     });
 
     test('preserves an existing error when a device is discovered', () {
-      final next = anError.copyWith(devices: [
-        const Device(
-          id: '1',
-          name: 'Roku',
-          type: DeviceType.roku,
-          model: 'x',
-        ),
-      ]);
+      final next = anError.copyWith(
+        devices: [
+          const Device(
+            id: '1',
+            name: 'Roku',
+            type: DeviceType.roku,
+            model: 'x',
+          ),
+        ],
+      );
 
       expect(next.error, anError.error);
       expect(next.devices, hasLength(1));

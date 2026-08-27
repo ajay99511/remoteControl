@@ -33,10 +33,12 @@ void main() {
     controller.connect();
     async.flushMicrotasks();
 
-    inbound.add(jsonEncode({
-      'type': 'registered',
-      'payload': {'client-key': 'client-key-1'},
-    }));
+    inbound.add(
+      jsonEncode({
+        'type': 'registered',
+        'payload': {'client-key': 'client-key-1'},
+      }),
+    );
     async.flushMicrotasks();
     return inbound;
   }
@@ -47,8 +49,9 @@ void main() {
     mockSink = MockWebSocketSink();
 
     when(mockChannel.sink).thenReturn(mockSink);
-    when(mockChannel.stream)
-        .thenAnswer((_) => StreamController<dynamic>().stream);
+    when(
+      mockChannel.stream,
+    ).thenAnswer((_) => StreamController<dynamic>().stream);
     when(mockSink.close(any, any)).thenAnswer((_) async => null);
 
     controller = LgController(
@@ -153,7 +156,8 @@ void main() {
         expect(
           events,
           contains(ControllerHealth.disconnected),
-          reason: 'a session the app did not end must still be announced, or '
+          reason:
+              'a session the app did not end must still be announced, or '
               'the UI goes on showing CONNECTED over a dead transport',
         );
         inbound.close();
@@ -189,16 +193,20 @@ void main() {
         async.flushMicrotasks();
 
         expect(results, hasLength(4));
-        expect(results, everyElement(isA<CommandUnsupported>()),
-            reason: 'the UI must be told, not left to assume success');
+        expect(
+          results,
+          everyElement(isA<CommandUnsupported>()),
+          reason: 'the UI must be told, not left to assume success',
+        );
 
-        final frames = verify(mockSink.add(captureAny)).captured
-            .whereType<String>()
-            .join('\n');
+        final frames = verify(
+          mockSink.add(captureAny),
+        ).captured.whereType<String>().join('\n');
         expect(
           frames,
           isNot(contains('set3D')),
-          reason: 'up/down were wired to the TV 3D toggle, which is not '
+          reason:
+              'up/down were wired to the TV 3D toggle, which is not '
               'navigation and is hard for a user to undo',
         );
         expect(frames, isNot(contains('"type":"request"')));

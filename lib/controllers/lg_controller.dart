@@ -32,15 +32,16 @@ class LgController with HealthReporting implements DeviceController {
     this.port = 3000,
     required DevicePersistenceService persistence,
     WebSocketChannel Function(Uri)? channelFactory,
-  })  : _persistence = persistence,
-        _channelFactory = channelFactory;
+  }) : _persistence = persistence,
+       _channelFactory = channelFactory;
 
   @override
   Future<void> connect() async {
     try {
       _clientKey = await _persistence.loadLgClientKey(host);
       final wsUrl = Uri.parse('ws://$host:$port');
-      _channel = _channelFactory?.call(wsUrl) ?? WebSocketChannel.connect(wsUrl);
+      _channel =
+          _channelFactory?.call(wsUrl) ?? WebSocketChannel.connect(wsUrl);
 
       // 1. Send register payload
       final registerPayload = {
@@ -57,10 +58,10 @@ class LgController with HealthReporting implements DeviceController {
               "CONTROL_POWER",
               "CONTROL_INPUT_TV",
               "READ_INSTALLED_APPS",
-              "CHECK_3D"
-            ]
-          }
-        }
+              "CHECK_3D",
+            ],
+          },
+        },
       };
 
       _channel!.sink.add(jsonEncode(registerPayload));
@@ -184,7 +185,7 @@ class LgController with HealthReporting implements DeviceController {
       "type": "request",
       "id": "request_text",
       "uri": "ssap://com.webos.service.ime/insertText",
-      "payload": {"text": text, "replace": 0}
+      "payload": {"text": text, "replace": 0},
     };
     try {
       _channel!.sink.add(jsonEncode(payload));
@@ -206,7 +207,7 @@ class LgController with HealthReporting implements DeviceController {
       "type": "request",
       "id": "request_launch",
       "uri": "ssap://system.launcher/launch",
-      "payload": {"id": lgAppId}
+      "payload": {"id": lgAppId},
     };
 
     try {

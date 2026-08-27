@@ -49,8 +49,9 @@ void main() {
     mockPersistence = MockDevicePersistenceService();
     mockConnectivity = MockConnectivityService();
 
-    when(mockConnectivity.onConnectivityChanged)
-        .thenAnswer((_) => const Stream.empty());
+    when(
+      mockConnectivity.onConnectivityChanged,
+    ).thenAnswer((_) => const Stream.empty());
     when(mockPersistence.loadDevice()).thenAnswer((_) async => null);
   });
 
@@ -61,8 +62,10 @@ void main() {
 
       await container.read(connectionProvider.notifier).connect(testDevice);
 
-      expect(container.read(connectionProvider).status,
-          ConnectionStatus.connected);
+      expect(
+        container.read(connectionProvider).status,
+        ConnectionStatus.connected,
+      );
       verify(mockPersistence.saveDevice(testDevice)).called(1);
     });
 
@@ -80,9 +83,14 @@ void main() {
         async.elapse(const Duration(seconds: 30));
 
         expect(
-            container.read(connectionProvider).status, ConnectionStatus.error);
-        expect(fake.connectCalls, 5,
-            reason: 'one initial attempt plus four retries');
+          container.read(connectionProvider).status,
+          ConnectionStatus.error,
+        );
+        expect(
+          fake.connectCalls,
+          5,
+          reason: 'one initial attempt plus four retries',
+        );
       });
     });
 
@@ -98,7 +106,9 @@ void main() {
         async.flushMicrotasks();
 
         expect(
-            container.read(connectionProvider).status, ConnectionStatus.error);
+          container.read(connectionProvider).status,
+          ConnectionStatus.error,
+        );
         expect(fake.connectCalls, 1, reason: 'a permanent error is final');
         expect(async.pendingTimers, isEmpty);
       });
@@ -165,18 +175,22 @@ void main() {
         notifier.connect(testDevice);
         async.elapse(const Duration(seconds: 60));
 
-        expect(container.read(connectionProvider).status,
-            ConnectionStatus.connected,
-            reason: 'a superseded chain must not overwrite a newer result');
+        expect(
+          container.read(connectionProvider).status,
+          ConnectionStatus.connected,
+          reason: 'a superseded chain must not overwrite a newer result',
+        );
         expect(container.read(connectionProvider).device, testDevice);
       });
     });
 
     test('surfaces a readable message, not a raw exception toString', () {
       fakeAsync((async) {
-        final container = containerWith(FakeController(
-          connectError: const UnsupportedDeviceException(DeviceType.googleTv),
-        ));
+        final container = containerWith(
+          FakeController(
+            connectError: const UnsupportedDeviceException(DeviceType.googleTv),
+          ),
+        );
         addTearDown(container.dispose);
 
         container.read(connectionProvider.notifier).connect(testDevice);
@@ -197,8 +211,10 @@ void main() {
       addTearDown(container.dispose);
 
       await container.read(connectionProvider.notifier).connect(testDevice);
-      expect(container.read(connectionProvider).status,
-          ConnectionStatus.connected);
+      expect(
+        container.read(connectionProvider).status,
+        ConnectionStatus.connected,
+      );
 
       // The TV goes away without the app asking. Before the health stream this
       // stopped inside the controller, and the UI went on showing CONNECTED
@@ -207,8 +223,10 @@ void main() {
       await Future<void>.delayed(Duration.zero);
 
       expect(container.read(connectionProvider).status, ConnectionStatus.error);
-      expect(container.read(connectionProvider).errorMessage,
-          contains('Lost connection'));
+      expect(
+        container.read(connectionProvider).errorMessage,
+        contains('Lost connection'),
+      );
     });
 
     test('commands report failure once the session is gone', () async {
@@ -255,8 +273,9 @@ void main() {
     test('reconnects when Wi-Fi is restored after an error', () async {
       final connectivity = StreamController<List<ConnectivityResult>>();
       addTearDown(connectivity.close);
-      when(mockConnectivity.onConnectivityChanged)
-          .thenAnswer((_) => connectivity.stream);
+      when(
+        mockConnectivity.onConnectivityChanged,
+      ).thenAnswer((_) => connectivity.stream);
 
       final container = containerWith(FakeController());
       addTearDown(container.dispose);
@@ -270,8 +289,10 @@ void main() {
       connectivity.add([ConnectivityResult.wifi]);
       await Future<void>.delayed(const Duration(milliseconds: 50));
 
-      expect(container.read(connectionProvider).status,
-          anyOf(ConnectionStatus.connecting, ConnectionStatus.connected));
+      expect(
+        container.read(connectionProvider).status,
+        anyOf(ConnectionStatus.connecting, ConnectionStatus.connected),
+      );
     });
 
     test('disconnect() clears persistence', () async {

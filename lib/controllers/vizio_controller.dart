@@ -28,8 +28,8 @@ class VizioController with HealthReporting implements DeviceController {
     required DevicePersistenceService persistence,
     this.port = 7345,
     http.Client? client,
-  })  : _persistence = persistence,
-        _client = client ?? http.Client();
+  }) : _persistence = persistence,
+       _client = client ?? http.Client();
 
   Uri _smartCastUri(String path) => Uri.parse('https://$host:$port/$path');
 
@@ -95,20 +95,19 @@ class VizioController with HealthReporting implements DeviceController {
         {
           "CODESET": mapping['codeset'],
           "CODE": mapping['code'],
-          "ACTION": "KEYPRESS"
-        }
-      ]
+          "ACTION": "KEYPRESS",
+        },
+      ],
     };
 
     try {
-      await _client.put(
-        _smartCastUri('key_command/'),
-        headers: {
-          'Content-Type': 'application/json',
-          'AUTH': ?_authToken,
-        },
-        body: jsonEncode(payload),
-      ).timeout(const Duration(seconds: 3));
+      await _client
+          .put(
+            _smartCastUri('key_command/'),
+            headers: {'Content-Type': 'application/json', 'AUTH': ?_authToken},
+            body: jsonEncode(payload),
+          )
+          .timeout(const Duration(seconds: 3));
       return const CommandSent();
     } catch (e, s) {
       log.e('VizioController: Failed to send key ${key.name}', e, s);

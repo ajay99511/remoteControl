@@ -159,7 +159,12 @@ void main() {
 
     test('rejects an announcement with no name or no address', () {
       expect(
-        parseMdnsService(name: '', host: 'x.local', port: 80, type: '_roku._tcp'),
+        parseMdnsService(
+          name: '',
+          host: 'x.local',
+          port: 80,
+          type: '_roku._tcp',
+        ),
         isNull,
       );
       expect(

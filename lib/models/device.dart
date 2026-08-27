@@ -73,22 +73,22 @@ class Device {
   });
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'type': type.toJson(),
-        'model': model,
-        'ip': ip,
-        'port': port,
-      };
+    'id': id,
+    'name': name,
+    'type': type.toJson(),
+    'model': model,
+    'ip': ip,
+    'port': port,
+  };
 
   factory Device.fromJson(Map<String, dynamic> json) => Device(
-        id: json['id'] as String,
-        name: json['name'] as String,
-        type: DeviceType.fromString(json['type'] as String? ?? 'unknown'),
-        model: json['model'] as String,
-        ip: json['ip'] as String?,
-        port: json['port'] as int?,
-      );
+    id: json['id'] as String,
+    name: json['name'] as String,
+    type: DeviceType.fromString(json['type'] as String? ?? 'unknown'),
+    model: json['model'] as String,
+    ip: json['ip'] as String?,
+    port: json['port'] as int?,
+  );
 
   Device copyWith({
     String? id,
@@ -97,15 +97,14 @@ class Device {
     String? model,
     String? ip,
     int? port,
-  }) =>
-      Device(
-        id: id ?? this.id,
-        name: name ?? this.name,
-        type: type ?? this.type,
-        model: model ?? this.model,
-        ip: ip ?? this.ip,
-        port: port ?? this.port,
-      );
+  }) => Device(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    type: type ?? this.type,
+    model: model ?? this.model,
+    ip: ip ?? this.ip,
+    port: port ?? this.port,
+  );
 
   @override
   bool operator ==(Object other) =>

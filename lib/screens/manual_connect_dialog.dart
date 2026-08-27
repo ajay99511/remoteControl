@@ -140,7 +140,9 @@ class _ManualConnectDialogState extends State<ManualConnectDialog> {
               keyboardType: TextInputType.url,
               autocorrect: false,
               onChanged: (value) => setState(() {
-                _ipError = value.trim().isEmpty ? null : validateManualHost(value);
+                _ipError = value.trim().isEmpty
+                    ? null
+                    : validateManualHost(value);
               }),
               onSubmitted: (_) => _canSubmit ? _submit() : null,
               decoration: _fieldDecoration(
@@ -168,14 +170,14 @@ class _ManualConnectDialogState extends State<ManualConnectDialog> {
         ElevatedButton(
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.indigoAccent,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
           ),
           onPressed: _canSubmit ? _submit : null,
           child: const Text(
             'Connect',
-            style:
-                TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
           ),
         ),
       ],
@@ -186,20 +188,19 @@ class _ManualConnectDialogState extends State<ManualConnectDialog> {
     required String label,
     String? hint,
     String? error,
-  }) =>
-      InputDecoration(
-        // A real label, associated with the field, rather than a detached Text
-        // widget that a screen reader cannot connect to the input.
-        labelText: label,
-        labelStyle: const TextStyle(color: Colors.white70),
-        hintText: hint,
-        hintStyle: const TextStyle(color: Colors.grey),
-        errorText: error,
-        filled: true,
-        fillColor: Colors.black.withValues(alpha: 0.2),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
-        ),
-      );
+  }) => InputDecoration(
+    // A real label, associated with the field, rather than a detached Text
+    // widget that a screen reader cannot connect to the input.
+    labelText: label,
+    labelStyle: const TextStyle(color: Colors.white70),
+    hintText: hint,
+    hintStyle: const TextStyle(color: Colors.grey),
+    errorText: error,
+    filled: true,
+    fillColor: Colors.black.withValues(alpha: 0.2),
+    border: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: BorderSide.none,
+    ),
+  );
 }

@@ -33,13 +33,12 @@ class FakeDatagramSocket extends Stream<RawSocketEvent>
     Function? onError,
     void Function()? onDone,
     bool? cancelOnError,
-  }) =>
-      _events.stream.listen(
-        onData,
-        onError: onError,
-        onDone: onDone,
-        cancelOnError: cancelOnError,
-      );
+  }) => _events.stream.listen(
+    onData,
+    onError: onError,
+    onDone: onDone,
+    cancelOnError: cancelOnError,
+  );
 
   @override
   int send(List<int> buffer, InternetAddress address, int port) {
