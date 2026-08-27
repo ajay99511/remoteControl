@@ -49,6 +49,34 @@ finding, each with a test confirmed failing against the unfixed code first.
 | Crash reporting | Adding a dependency is a Consequential decision. `installErrorHandlers()` marks the seam. |
 | Before/after frame timings for M-2 | Profiling needs a physical device this environment does not have. The blur removal is justified structurally, not by a measurement that was not taken. |
 
+### Follow-up review: persistence, discovery and connection paths
+
+A later targeted review of those three paths found six issues the phase work
+had not, plus one open uncertainty. All six are fixed; the uncertainty is
+stated rather than papered over.
+
+| # | Finding | Status |
+|---|---|---|
+| N-1 | **A device's identity was its IP address.** `id` was `'$ip:$port'` and every secret was filed under the host (`samsung_token_<ip>`, `tofu_cert_<ip>`, …). A DHCP renewal orphaned the pairing token, orphaned the TOFU pin — degrading trust-on-first-use to trust-on-every-new-address — and left a stored token addressed to whatever device next held that lease. SSDP's `USN` header carries a stable device UUID and the parser was discarding it. | Fixed |
+| N-2 | **Reconnected over cellular.** `_onConnectivityChanged` treated anything not `none` as reachable, so leaving the house started a full retry chain against a private address. | Fixed |
+| N-3 | **The resume signal was fabricated** — a hardcoded `[wifi]` on every foreground regardless of the real transport, which is what made N-2 fire so often. | Fixed |
+| N-4 | **Two dependencies declared and never imported** (`network_info_plus`, `vibration`). `network_info_plus` also drags an Android location-permission requirement nothing wanted. | Fixed |
+| N-5 | **Keychain accessibility left at the default**, which is included in encrypted backups — so pairing tokens and certificate pins would restore onto a different handset. | Fixed |
+| N-6 | **mDNS registrations started serially** — seven independent `await`s delaying the whole scan, SSDP included. | Fixed |
+
+**Still uncertain, needs a physical device:** Android multicast reception. The
+manifest holds `CHANGE_WIFI_MULTICAST_STATE` but nothing acquires a
+`WifiManager.MulticastLock`. For the mDNS path this is likely fine — `nsd`
+uses the system `NsdManager`, which handles it below the app — and the SSDP
+path receives *unicast* replies to an ephemeral port, which does not require
+the lock. Likely fine is not verified; discovery reliability on Android should
+be checked on hardware before release.
+
+**Also still open:** a moved device is now *recognised* but not *re-resolved*.
+If the saved address is stale, reconnect still fails — it just no longer loses
+the pairing along with it. Closing that needs the scanner and the connection
+provider to talk to each other.
+
 **Two corrections to this audit were made during remediation**, both marked
 in place where the original claim appears — the H-3 caret/reversion detail,
 and the SSDP `substring` bounds claim in §2. Both were found by trying to
