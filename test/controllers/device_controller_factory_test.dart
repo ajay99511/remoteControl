@@ -1,5 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mockito/mockito.dart';
 
 import 'package:devicecontroller/controllers/device_controller_factory.dart';
 import 'package:devicecontroller/controllers/fire_tv_controller.dart';
