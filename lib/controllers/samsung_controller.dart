@@ -188,6 +188,9 @@ class SamsungController with HealthReporting implements DeviceController {
         }
       };
 
+    // Ownership transfers to _channel below and _handleDisconnect closes it;
+    // the lint cannot follow that hand-off.
+    // ignore: close_sinks
     final WebSocket socket;
     try {
       socket = await WebSocket.connect(
@@ -239,7 +242,8 @@ class SamsungController with HealthReporting implements DeviceController {
         }
 
         if (data['event'] == 'ms.channel.connect') {
-          final token = data['data']?['token'] as String?;
+          final payload = data['data'] as Map<String, dynamic>?;
+          final token = payload?['token'] as String?;
           if (token != null) {
             unawaited(_persistence.saveSamsungToken(host, token));
           }

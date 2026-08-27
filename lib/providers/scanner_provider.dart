@@ -198,7 +198,10 @@ class ScannerNotifier extends Notifier<ScannerState> {
       host: service.host ?? '',
       port: service.port ?? 0,
       type: service.type ?? '',
-      addresses: [for (final a in service.addresses ?? []) a.address],
+      addresses: [
+        for (final a in service.addresses ?? const <InternetAddress>[])
+          a.address,
+      ],
     );
     if (device == null) return;
     _addDevice(device, via: 'mDNS');

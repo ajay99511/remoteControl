@@ -100,9 +100,10 @@ void main() {
       await controller.sendKey(RemoteKey.mute);
 
       final captured = verify(mockSink.add(captureAny)).captured.first as String;
-      final payload = jsonDecode(captured);
+      final payload = jsonDecode(captured) as Map<String, dynamic>;
+      final params = payload['params'] as Map<String, dynamic>;
       expect(payload['method'], 'ms.remote.control');
-      expect(payload['params']['DataOfCmd'], 'KEY_MUTE');
+      expect(params['DataOfCmd'], 'KEY_MUTE');
     });
 
     test('sendText truncates to 500 chars', () async {
@@ -113,8 +114,9 @@ void main() {
       await controller.sendText(longText);
 
       final captured = verify(mockSink.add(captureAny)).captured.first as String;
-      final payload = jsonDecode(captured);
-      final decodedCmd = utf8.decode(base64Decode(payload['params']['Cmd']));
+      final payload = jsonDecode(captured) as Map<String, dynamic>;
+      final params = payload['params'] as Map<String, dynamic>;
+      final decodedCmd = utf8.decode(base64Decode(params['Cmd'] as String));
       expect(decodedCmd.length, 500);
     });
 

@@ -158,10 +158,10 @@ class _DeviceScannerScreenState extends ConsumerState<DeviceScannerScreen> {
                           color: Colors.white.withValues(alpha: 0.1),
                         ),
                       ),
-                      child: Row(
+                      child: const Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const SizedBox(
+                          SizedBox(
                             width: 20,
                             height: 20,
                             child: CircularProgressIndicator(
@@ -169,8 +169,8 @@ class _DeviceScannerScreenState extends ConsumerState<DeviceScannerScreen> {
                               color: Colors.indigoAccent,
                             ),
                           ),
-                          const SizedBox(width: 16),
-                          const Text(
+                          SizedBox(width: 16),
+                          Text(
                             'Connecting to device...',
                             style: TextStyle(
                               color: Colors.white,

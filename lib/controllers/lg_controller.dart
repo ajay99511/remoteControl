@@ -86,7 +86,8 @@ class LgController with HealthReporting implements DeviceController {
           }
 
           if (data['type'] == 'registered') {
-            _clientKey = data['payload']?['client-key'] as String?;
+            final payload = data['payload'] as Map<String, dynamic>?;
+            _clientKey = payload?['client-key'] as String?;
             if (_clientKey != null) {
               unawaited(_persistence.saveLgClientKey(host, _clientKey!));
             }

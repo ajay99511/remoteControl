@@ -10,7 +10,7 @@ import 'device_controller.dart';
 class FireTvController with HealthReporting implements DeviceController {
   @override
   Future<void> connect() async =>
-      throw UnsupportedDeviceException(DeviceType.fireTv);
+      throw const UnsupportedDeviceException(DeviceType.fireTv);
 
   @override
   Future<void> disconnect() async {}

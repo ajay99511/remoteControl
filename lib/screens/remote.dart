@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -47,7 +48,7 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen>
       setState(() {
         activeTab = _tabController.index;
       });
-      HapticFeedback.selectionClick();
+      unawaited(HapticFeedback.selectionClick());
     });
   }
 
@@ -68,13 +69,13 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen>
     if (!mounted) return;
     switch (result) {
       case CommandSent():
-        HapticFeedback.lightImpact();
+        unawaited(HapticFeedback.lightImpact());
       case CommandUnsupported(:final what):
         _showMessage('$what is not available on this TV');
       case CommandNotConnected():
         _showMessage('Not connected to ${widget.device.name}');
       case CommandFailed():
-        HapticFeedback.heavyImpact();
+        unawaited(HapticFeedback.heavyImpact());
         _showMessage('$label failed to reach the TV');
     }
   }
@@ -107,8 +108,10 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen>
   }
 
   Future<void> _sendPower() async {
-    HapticFeedback.mediumImpact();
-    await _sendKey(RemoteKey.power);
+    final result =
+        await ref.read(connectionProvider.notifier).sendKey(RemoteKey.power);
+    if (result.isSuccess) unawaited(HapticFeedback.mediumImpact());
+    _report(result, 'Power');
   }
 
   void _toggleKeyboard() {

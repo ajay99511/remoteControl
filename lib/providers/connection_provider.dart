@@ -64,7 +64,7 @@ class ConnectionNotifier extends Notifier<DeviceConnectionState> {
   late final DevicePersistenceService _persistence;
   late final ConnectivityService _connectivity;
   late final DeviceControllerFactory _makeController;
-  StreamSubscription? _connectivitySub;
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
   StreamSubscription<ControllerHealth>? _healthSub;
 
   @override

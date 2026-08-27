@@ -10,7 +10,7 @@ import 'device_controller.dart';
 class GoogleTvController with HealthReporting implements DeviceController {
   @override
   Future<void> connect() async =>
-      throw UnsupportedDeviceException(DeviceType.googleTv);
+      throw const UnsupportedDeviceException(DeviceType.googleTv);
 
   @override
   Future<void> disconnect() async {}
