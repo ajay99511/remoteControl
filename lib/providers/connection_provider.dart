@@ -99,15 +99,25 @@ class ConnectionNotifier extends Notifier<DeviceConnectionState> {
   }
 
   void _onConnectivityChanged(List<ConnectivityResult> results) {
-    if (results.contains(ConnectivityResult.none)) {
-      log.w('ConnectionNotifier: Network connectivity lost');
+    if (_disposed) return;
+
+    // Anything other than wifi/ethernet cannot reach a device on the LAN.
+    // Testing only for `none` meant a drop to mobile data read as "still
+    // online", and every foreground on cellular started a full retry chain
+    // against an unreachable private address.
+    if (!canReachLocalNetwork(results)) {
+      if (state.status == ConnectionStatus.disconnected) return;
+      log.w('ConnectionNotifier: no local network transport available');
       state = state.copyWith(
         status: ConnectionStatus.error,
-        errorMessage: 'Wi-Fi connection lost',
+        errorMessage: 'Not on a Wi-Fi network.',
       );
-    } else if (state.status == ConnectionStatus.error && state.device != null) {
-      log.i('ConnectionNotifier: Connectivity restored, attempting reconnect');
-      connect(state.device!);
+      return;
+    }
+
+    if (state.status == ConnectionStatus.error && state.device != null) {
+      log.i('ConnectionNotifier: local network back, attempting reconnect');
+      unawaited(connect(state.device!));
     }
   }
 

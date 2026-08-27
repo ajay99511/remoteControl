@@ -295,6 +295,60 @@ void main() {
       );
     });
 
+    test('does not chase a LAN address over cellular', () async {
+      final connectivity = StreamController<List<ConnectivityResult>>();
+      addTearDown(connectivity.close);
+      when(
+        mockConnectivity.onConnectivityChanged,
+      ).thenAnswer((_) => connectivity.stream);
+
+      final fake = FakeController();
+      final container = containerWith(fake);
+      addTearDown(container.dispose);
+      final notifier = container.read(connectionProvider.notifier);
+
+      await notifier.connect(testDevice);
+      final attemptsWhileOnWifi = fake.connectCalls;
+
+      // The user leaves the house. Mobile data is not `none`, so the old
+      // check read this as "still online" and started a retry chain against
+      // an unreachable private address.
+      connectivity.add([ConnectivityResult.mobile]);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      expect(container.read(connectionProvider).status, ConnectionStatus.error);
+      expect(
+        fake.connectCalls,
+        attemptsWhileOnWifi,
+        reason: 'cellular cannot reach the TV; do not spend attempts on it',
+      );
+    });
+
+    test('resumes reconnecting once wifi returns', () async {
+      final connectivity = StreamController<List<ConnectivityResult>>();
+      addTearDown(connectivity.close);
+      when(
+        mockConnectivity.onConnectivityChanged,
+      ).thenAnswer((_) => connectivity.stream);
+
+      final container = containerWith(FakeController());
+      addTearDown(container.dispose);
+      final notifier = container.read(connectionProvider.notifier);
+
+      await notifier.connect(testDevice);
+      connectivity.add([ConnectivityResult.mobile]);
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(container.read(connectionProvider).status, ConnectionStatus.error);
+
+      connectivity.add([ConnectivityResult.wifi]);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      expect(
+        container.read(connectionProvider).status,
+        ConnectionStatus.connected,
+      );
+    });
+
     test('disconnect() clears persistence', () async {
       final container = containerWith(FakeController());
       addTearDown(container.dispose);

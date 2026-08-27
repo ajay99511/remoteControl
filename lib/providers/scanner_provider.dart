@@ -145,15 +145,21 @@ class ScannerNotifier extends Notifier<ScannerState> {
 
     try {
       if (_mdnsEnabled) {
-        for (final type in serviceTypes) {
-          final discovery = await startDiscovery(
-            type,
-            ipLookupType: IpLookupType.any,
-          );
-          if (_disposed) {
-            await stopDiscovery(discovery);
-            return;
-          }
+        // Started concurrently: these are seven independent registrations and
+        // awaiting them one at a time delayed the whole scan, SSDP included,
+        // by the sum of their setup latencies.
+        final started = await Future.wait(
+          serviceTypes.map(
+            (type) => startDiscovery(type, ipLookupType: IpLookupType.any),
+          ),
+        );
+
+        if (_disposed) {
+          await Future.wait(started.map(stopDiscovery));
+          return;
+        }
+
+        for (final discovery in started) {
           _discoveries.add(discovery);
           discovery.addServiceListener((service, status) {
             if (status == ServiceStatus.found) _handleServiceFound(service);
