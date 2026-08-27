@@ -1,14 +1,18 @@
 import 'dart:async';
-import 'dart:ui';
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 
+import '../theme/app_colors.dart';
+
 import '../models/device.dart';
 import 'manual_connect_dialog.dart';
 import '../providers/connection_provider.dart';
 import '../providers/scanner_provider.dart';
+import '../widgets/ambient_background.dart';
 
 class DeviceScannerScreen extends ConsumerStatefulWidget {
   const DeviceScannerScreen({super.key});
@@ -57,39 +61,10 @@ class _DeviceScannerScreenState extends ConsumerState<DeviceScannerScreen> {
     });
 
     return Scaffold(
-      backgroundColor: const Color(0xFF09090B),
+      backgroundColor: AppColors.background,
       body: Stack(
         children: [
-          // Background Glow Orbs
-          Positioned(
-            top: -100,
-            left: -100,
-            child: Container(
-              width: 300,
-              height: 300,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.indigoAccent.withValues(alpha: 0.15),
-              ),
-            ),
-          ),
-          Positioned(
-            bottom: -50,
-            right: -50,
-            child: Container(
-              width: 250,
-              height: 250,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.purpleAccent.withValues(alpha: 0.15),
-              ),
-            ),
-          ),
-          // Blur Layer
-          BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 50, sigmaY: 50),
-            child: Container(color: Colors.transparent),
-          ),
+          const AmbientBackground(),
           // Main Content
           SafeArea(
             child: Padding(
@@ -194,98 +169,104 @@ class _DeviceScannerScreenState extends ConsumerState<DeviceScannerScreen> {
   }
 
   Widget _buildScanningAnimation() {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Stack(
-            alignment: Alignment.center,
-            children: [
-              Container(
-                    width: 120,
-                    height: 120,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: Colors.indigoAccent.withValues(alpha: 0.3),
-                        width: 2,
+    // Isolated: this pulses forever while a scan runs, and without a
+    // boundary it repaints everything sharing its layer.
+    return RepaintBoundary(
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Stack(
+              alignment: Alignment.center,
+              children: [
+                Container(
+                      width: 120,
+                      height: 120,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: Colors.indigoAccent.withValues(alpha: 0.3),
+                          width: 2,
+                        ),
                       ),
-                    ),
-                  )
-                  .animate(onPlay: (controller) => controller.repeat())
-                  .scale(
-                    duration: 2.seconds,
-                    begin: const Offset(1, 1),
-                    end: const Offset(2.5, 2.5),
-                  )
-                  .fadeOut(duration: 2.seconds),
-              Container(
-                    width: 120,
-                    height: 120,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: Colors.purpleAccent.withValues(alpha: 0.3),
-                        width: 2,
+                    )
+                    .animate(onPlay: (controller) => controller.repeat())
+                    .scale(
+                      duration: 2.seconds,
+                      begin: const Offset(1, 1),
+                      end: const Offset(2.5, 2.5),
+                    )
+                    .fadeOut(duration: 2.seconds),
+                Container(
+                      width: 120,
+                      height: 120,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: Colors.purpleAccent.withValues(alpha: 0.3),
+                          width: 2,
+                        ),
                       ),
+                    )
+                    .animate(
+                      onPlay: (controller) => controller.repeat(),
+                      delay: 600.ms,
+                    )
+                    .scale(
+                      duration: 2.seconds,
+                      begin: const Offset(1, 1),
+                      end: const Offset(2.5, 2.5),
+                    )
+                    .fadeOut(duration: 2.seconds),
+                Container(
+                  width: 120,
+                  height: 120,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: LinearGradient(
+                      colors: [
+                        Colors.indigoAccent.withValues(alpha: 0.2),
+                        Colors.purpleAccent.withValues(alpha: 0.2),
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
                     ),
-                  )
-                  .animate(
-                    onPlay: (controller) => controller.repeat(),
-                    delay: 600.ms,
-                  )
-                  .scale(
-                    duration: 2.seconds,
-                    begin: const Offset(1, 1),
-                    end: const Offset(2.5, 2.5),
-                  )
-                  .fadeOut(duration: 2.seconds),
-              Container(
-                width: 120,
-                height: 120,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: LinearGradient(
-                    colors: [
-                      Colors.indigoAccent.withValues(alpha: 0.2),
-                      Colors.purpleAccent.withValues(alpha: 0.2),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.1),
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.indigoAccent.withValues(alpha: 0.2),
+                        blurRadius: 30,
+                        spreadRadius: 10,
+                      ),
                     ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
                   ),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.1),
+                  child: const Icon(
+                    LucideIcons.radar,
+                    color: Colors.white,
+                    size: 48,
                   ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.indigoAccent.withValues(alpha: 0.2),
-                      blurRadius: 30,
-                      spreadRadius: 10,
-                    ),
-                  ],
                 ),
-                child: const Icon(
-                  LucideIcons.radar,
-                  color: Colors.white,
-                  size: 48,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 40),
-          const Text(
-                'Scanning Network...',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white70,
-                  letterSpacing: 2.0,
-                ),
-              )
-              .animate(onPlay: (controller) => controller.repeat(reverse: true))
-              .fadeIn(duration: 1.seconds)
-              .fadeOut(duration: 1.seconds),
-        ],
+              ],
+            ),
+            const SizedBox(height: 40),
+            const Text(
+                  'Scanning Network...',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white70,
+                    letterSpacing: 2.0,
+                  ),
+                )
+                .animate(
+                  onPlay: (controller) => controller.repeat(reverse: true),
+                )
+                .fadeIn(duration: 1.seconds)
+                .fadeOut(duration: 1.seconds),
+          ],
+        ),
       ),
     );
   }
@@ -329,10 +310,20 @@ class _DeviceScannerScreenState extends ConsumerState<DeviceScannerScreen> {
                   itemCount: devices.length,
                   itemBuilder: (context, index) {
                     final device = devices[index];
-                    return _buildDeviceItem(device)
-                        .animate()
-                        .fadeIn(duration: 400.ms, delay: (index * 100).ms)
-                        .slideX(begin: 0.1, end: 0);
+                    // RepaintBoundary isolates each row so an animating
+                    // neighbour does not dirty the whole list layer, and the
+                    // stagger is capped: an unbounded index * 100ms delay
+                    // meant the 20th device faded in two seconds late, and
+                    // the animation restarted on every scroll recycle.
+                    return RepaintBoundary(
+                      child: _buildDeviceItem(device)
+                          .animate()
+                          .fadeIn(
+                            duration: 400.ms,
+                            delay: (math.min(index, 6) * 60).ms,
+                          )
+                          .slideX(begin: 0.1, end: 0),
+                    );
                   },
                 ),
         ),

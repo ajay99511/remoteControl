@@ -114,6 +114,25 @@ void main() {
       expect(params['DataOfCmd'], 'KEY_MUTE');
     });
 
+    test('sends a numpad digit as KEY_n, not as IME text', () async {
+      when(
+        mockPersistence.loadSamsungToken(any),
+      ).thenAnswer((_) async => 'token');
+      await controller.connect();
+
+      await controller.sendKey(RemoteKey.digit5);
+
+      final captured =
+          verify(mockSink.add(captureAny)).captured.first as String;
+      final payload = jsonDecode(captured) as Map<String, dynamic>;
+      final params = payload['params'] as Map<String, dynamic>;
+      // Routing digits through sendText produced TypeOfRemote
+      // SendInputString with a base64 payload, which types into a focused
+      // field rather than changing channel.
+      expect(params['TypeOfRemote'], 'SendRemoteKey');
+      expect(params['DataOfCmd'], 'KEY_5');
+    });
+
     test('sendText truncates to 500 chars', () async {
       when(
         mockPersistence.loadSamsungToken(any),

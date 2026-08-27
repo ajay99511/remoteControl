@@ -6,11 +6,14 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 
+import '../theme/app_colors.dart';
+
 import '../models/app_id.dart';
 import '../models/command_result.dart';
 import '../models/device.dart';
 import '../models/remote_key.dart';
 import '../providers/connection_provider.dart';
+import '../widgets/ambient_background.dart';
 import '../widgets/remote_buttons.dart';
 
 class RemoteScreen extends ConsumerStatefulWidget {
@@ -88,7 +91,7 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen>
       SnackBar(
         content: Text(message),
         behavior: SnackBarBehavior.floating,
-        backgroundColor: const Color(0xFF27272A),
+        backgroundColor: AppColors.surfaceRaised,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         duration: const Duration(seconds: 3),
         action: onRetry == null
@@ -141,6 +144,16 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen>
     }
   }
 
+  /// Sends a channel digit as a key press, not as text.
+  Future<void> _sendDigit(String digit) async {
+    final value = int.tryParse(digit);
+    if (value == null) return;
+    final result = await ref
+        .read(connectionProvider.notifier)
+        .sendKey(kDigitKeys[value]);
+    _report(result, 'Number $digit');
+  }
+
   Future<void> _launchApp(AppId appId) async {
     final result = await ref.read(connectionProvider.notifier).launchApp(appId);
     _report(result, appId.displayName);
@@ -164,38 +177,14 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen>
     });
 
     return Scaffold(
-      backgroundColor: const Color(0xFF09090B),
+      backgroundColor: AppColors.background,
       body: Stack(
         children: [
-          // Background Glow Orbs for depth
-          Positioned(
-            top: -100,
-            right: -100,
-            child: Container(
-              width: 300,
-              height: 300,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.indigoAccent.withValues(alpha: 0.1),
-              ),
-            ),
-          ),
-          Positioned(
-            bottom: -50,
-            left: -50,
-            child: Container(
-              width: 200,
-              height: 200,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.deepPurpleAccent.withValues(alpha: 0.1),
-              ),
-            ),
-          ),
-          // BackdropFilter sigma reduced to 15 (Requirement 2.30)
-          BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-            child: Container(color: Colors.transparent),
+          const AmbientBackground(
+            secondary: Colors.deepPurpleAccent,
+            primaryAlignment: Alignment(0.9, -1.0),
+            secondaryAlignment: Alignment(-1.0, 1.0),
+            intensity: 0.12,
           ),
           // Content
           SafeArea(
@@ -264,14 +253,14 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen>
                         height: 8,
                         decoration: BoxDecoration(
                           color: isConnected
-                              ? const Color(0xFF69F0AE)
+                              ? AppColors.connected
                               : Colors.redAccent,
                           shape: BoxShape.circle,
                           boxShadow: [
                             BoxShadow(
                               color:
                                   (isConnected
-                                          ? const Color(0xFF69F0AE)
+                                          ? AppColors.connected
                                           : Colors.redAccent)
                                       .withValues(alpha: 0.5),
                               blurRadius: 8,
@@ -291,7 +280,7 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen>
                     isConnected ? 'CONNECTED' : 'DISCONNECTED',
                     style: TextStyle(
                       color: isConnected
-                          ? const Color(0xFF69F0AE)
+                          ? AppColors.connected
                           : Colors.redAccent,
                       fontSize: 10,
                       fontWeight: FontWeight.w800,
@@ -447,8 +436,8 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen>
                                     begin: Alignment.topLeft,
                                     end: Alignment.bottomRight,
                                     colors: [
-                                      Color(0xFF27272A),
-                                      Color(0xFF18181B),
+                                      AppColors.surfaceRaised,
+                                      AppColors.surface,
                                     ],
                                   ),
                                   border: Border.all(
@@ -769,12 +758,7 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen>
                       color: Colors.white.withValues(alpha: 0.03),
                       borderRadius: BorderRadius.circular(20),
                       child: InkWell(
-                        onTap: () async {
-                          final result = await ref
-                              .read(connectionProvider.notifier)
-                              .sendText(num);
-                          _report(result, 'Number $num');
-                        },
+                        onTap: () => _sendDigit(num),
                         borderRadius: BorderRadius.circular(20),
                         splashColor: Colors.indigoAccent.withValues(alpha: 0.2),
                         child: Container(
@@ -861,7 +845,7 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen>
               child: Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF18181B).withValues(alpha: 0.8),
+                  color: AppColors.surface.withValues(alpha: 0.8),
                   borderRadius: BorderRadius.circular(24),
                   border: Border.all(
                     color: Colors.white.withValues(alpha: 0.1),

@@ -50,6 +50,17 @@ class RokuController with HealthReporting implements DeviceController {
     RemoteKey.power: 'Power',
     RemoteKey.sleep: 'Sleep',
     RemoteKey.star: 'Star',
+    // Roku ECP has no dedicated digit keys; Lit_ is the correct encoding.
+    RemoteKey.digit0: 'Lit_0',
+    RemoteKey.digit1: 'Lit_1',
+    RemoteKey.digit2: 'Lit_2',
+    RemoteKey.digit3: 'Lit_3',
+    RemoteKey.digit4: 'Lit_4',
+    RemoteKey.digit5: 'Lit_5',
+    RemoteKey.digit6: 'Lit_6',
+    RemoteKey.digit7: 'Lit_7',
+    RemoteKey.digit8: 'Lit_8',
+    RemoteKey.digit9: 'Lit_9',
   };
 
   /// Common Roku App IDs.

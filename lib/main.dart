@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import 'theme/app_colors.dart';
+
 import 'core/error_handlers.dart';
 import 'providers/connection_provider.dart';
 import 'screens/device_scanner.dart';
@@ -18,7 +20,7 @@ void main() {
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
       statusBarIconBrightness: Brightness.light,
-      systemNavigationBarColor: Color(0xFF09090B),
+      systemNavigationBarColor: AppColors.background,
       systemNavigationBarIconBrightness: Brightness.light,
     ),
   );
@@ -34,10 +36,10 @@ class MyApp extends ConsumerWidget {
   static final ThemeData _theme = ThemeData(
     useMaterial3: true,
     brightness: Brightness.dark,
-    scaffoldBackgroundColor: const Color(0xFF09090B),
+    scaffoldBackgroundColor: AppColors.background,
     colorScheme: const ColorScheme.dark(
       primary: Colors.indigoAccent,
-      surface: Color(0xFF18181B),
+      surface: AppColors.surface,
     ),
     textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme),
   );

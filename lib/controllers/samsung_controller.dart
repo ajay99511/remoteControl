@@ -70,6 +70,16 @@ class SamsungController with HealthReporting implements DeviceController {
     RemoteKey.power: 'KEY_POWER',
     RemoteKey.sleep: 'KEY_SLEEP',
     RemoteKey.star: 'KEY_TOOLS',
+    RemoteKey.digit0: 'KEY_0',
+    RemoteKey.digit1: 'KEY_1',
+    RemoteKey.digit2: 'KEY_2',
+    RemoteKey.digit3: 'KEY_3',
+    RemoteKey.digit4: 'KEY_4',
+    RemoteKey.digit5: 'KEY_5',
+    RemoteKey.digit6: 'KEY_6',
+    RemoteKey.digit7: 'KEY_7',
+    RemoteKey.digit8: 'KEY_8',
+    RemoteKey.digit9: 'KEY_9',
   };
 
   static const Map<AppId, String> _appIds = {

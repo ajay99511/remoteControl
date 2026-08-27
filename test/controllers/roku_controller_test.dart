@@ -206,6 +206,26 @@ void main() {
         );
       });
 
+      test('sends a numpad digit as a keypress', () async {
+        await connectOk();
+        when(
+          mockClient.post(
+            any,
+            headers: anyNamed('headers'),
+            body: anyNamed('body'),
+          ),
+        ).thenAnswer((_) async => http.Response('', 200));
+
+        expect(await controller.sendKey(RemoteKey.digit7), isA<CommandSent>());
+
+        verify(
+          mockClient.post(
+            Uri.parse('http://$host:$port/keypress/Lit_7'),
+            headers: anyNamed('headers'),
+          ),
+        ).called(1);
+      });
+
       test('supportedKeys reflects the ECP mapping', () async {
         expect(controller.supportedKeys, contains(RemoteKey.up));
         expect(controller.supportedKeys, isNot(contains(RemoteKey.pip)));

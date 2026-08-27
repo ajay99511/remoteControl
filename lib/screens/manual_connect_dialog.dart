@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../theme/app_colors.dart';
+
 import '../models/device.dart';
 
 /// Validates a manually entered host.
@@ -41,7 +43,7 @@ class ManualConnectDialog extends StatefulWidget {
 }
 
 class _ManualConnectDialogState extends State<ManualConnectDialog> {
-  static const _surface = Color(0xFF18181B);
+  static const _surface = AppColors.surface;
 
   final _ipController = TextEditingController();
   final _portController = TextEditingController(
