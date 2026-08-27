@@ -21,6 +21,41 @@
 
 ---
 
+## 0. Remediation Status
+
+Phases 1 and 2 of the roadmap in §5 are complete, along with most of Phase 3.
+Work was done slice by slice on `hardening/audit-remediation`, one commit per
+finding, each with a test confirmed failing against the unfixed code first.
+
+| Measure | Before | After |
+|---|---:|---:|
+| Tests passing | 20 | **164** |
+| Line coverage | 27.2% | **73.6%** |
+| `flutter analyze` | 15 issues (default lints) | **0** (with `dead_code`, `unawaited_futures`, `strict-casts` promoted to errors) |
+| Suite wall clock | ~30 s (real sockets) | ~8 s (no real I/O) |
+| CI | none | format + analyze + test + coverage floor + APK build |
+| Files at 0% coverage | `remote.dart`, `remote_buttons.dart`, `lg_controller.dart`, `vizio_controller.dart` | two unreachable stubs |
+
+**Closed:** C-1, C-2, C-3 · H-1 … H-9 (all) · M-1 … M-9 · L-1, L-5
+
+**Deliberately not done, and why:**
+
+| Item | Reason |
+|---|---|
+| `applicationId` still `com.example.devicecontroller` | Choosing an app's published identity is the owner's call, not a refactor's. Recorded as release blocker #1 in the README. **Needs a decision.** |
+| i18n (M-10) | ~80 strings. Mechanical but large, and it touches every widget; better as its own reviewable change. |
+| Splitting `remote.dart` / `device_scanner.dart` (§4) | Both are two-way doors and the least urgent items in the plan. Deferred until the one-way doors were closed, which they now are. |
+| `VendorProfile` consolidation (§4) | The 5-site vendor edit problem is real but unchanged; the abstraction is worth doing once someone actually adds a vendor. |
+| Crash reporting | Adding a dependency is a Consequential decision. `installErrorHandlers()` marks the seam. |
+| Before/after frame timings for M-2 | Profiling needs a physical device this environment does not have. The blur removal is justified structurally, not by a measurement that was not taken. |
+
+**Two corrections to this audit were made during remediation**, both marked
+in place where the original claim appears — the H-3 caret/reversion detail,
+and the SSDP `substring` bounds claim in §2. Both were found by trying to
+write the test that would prove them.
+
+---
+
 ## 1. Executive Summary & Quality Scorecard
 
 ### High-level health assessment
