@@ -9,6 +9,7 @@ import 'package:permission_handler/permission_handler.dart' hide ServiceStatus;
 
 import '../core/app_logger.dart';
 import '../models/device.dart';
+import 'discovery_parsers.dart';
 
 /// Immutable state for the device scanner.
 class ScannerState {
@@ -192,49 +193,25 @@ class ScannerNotifier extends Notifier<ScannerState> {
   }
 
   void _handleServiceFound(Service service) {
-    final name = service.name ?? '';
-    final host = service.host ?? '';
-    final port = service.port ?? 0;
-    final type = service.type ?? '';
-
-    final addresses = service.addresses ?? [];
-    final ip = addresses.isNotEmpty ? addresses.first.address : host;
-
-    if (name.isEmpty || ip.isEmpty) return;
-
-    DeviceType deviceType = DeviceType.unknown;
-    int resolvedPort = port;
-
-    if (port == 8060 ||
-        name.toLowerCase().contains('roku') ||
-        type.contains('_roku')) {
-      deviceType = DeviceType.roku;
-      if (resolvedPort == 80) resolvedPort = 8060;
-    } else if (name.toLowerCase().contains('samsung') ||
-        type.contains('samsung')) {
-      deviceType = DeviceType.samsung;
-      if (resolvedPort == 80) resolvedPort = 8002;
-    } else if (type.contains('_googlecast')) {
-      deviceType = DeviceType.googleTv;
-    } else if (type.contains('_airplay')) {
-      // AirPlay could be LG, Vizio, etc.
-      deviceType = DeviceType.unknown;
-    }
-
-    final existing = state.devices;
-    if (existing.any((d) => d.ip == ip && d.port == resolvedPort)) return;
-
-    final device = Device(
-      id: '$ip:$resolvedPort',
-      name: name,
-      type: deviceType,
-      model: type.replaceAll('._tcp', '').replaceAll('_', ''),
-      ip: ip,
-      port: resolvedPort,
+    final device = parseMdnsService(
+      name: service.name ?? '',
+      host: service.host ?? '',
+      port: service.port ?? 0,
+      type: service.type ?? '',
+      addresses: [for (final a in service.addresses ?? []) a.address],
     );
+    if (device == null) return;
+    _addDevice(device, via: 'mDNS');
+  }
 
-    state = state.copyWith(devices: [...existing, device]);
-    log.d('ScannerNotifier: Found device "$name" at $ip:$resolvedPort (${deviceType.name}) via mDNS');
+  /// Merges a discovered device into state, keyed by host.
+  void _addDevice(Device device, {required String via}) {
+    if (_disposed) return;
+    final merged = mergeDiscovered(state.devices, device);
+    if (identical(merged, state.devices)) return;
+    state = state.copyWith(devices: merged);
+    log.d('ScannerNotifier: found "${device.name}" at ${device.ip}:'
+        '${device.port} (${device.type.name}) via $via');
   }
 
   Future<void> _startSsdpDiscovery() async {
@@ -289,72 +266,9 @@ class ScannerNotifier extends Notifier<ScannerState> {
   }
 
   void _handleSsdpResponse(String response, String sourceIp) {
-    if (!response.toUpperCase().contains('HTTP/1.1 200 OK')) return;
-
-    final lines = response.split('\r\n');
-    String server = '';
-    String location = '';
-
-    for (var line in lines) {
-      final upperLine = line.toUpperCase();
-      if (upperLine.startsWith('SERVER:')) {
-        server = line.substring(7).trim();
-      } else if (upperLine.startsWith('LOCATION:')) {
-        location = line.substring(9).trim();
-      }
-    }
-
-    DeviceType deviceType = DeviceType.unknown;
-    String name = 'Unknown Device';
-    int port = 80;
-    String ip = sourceIp;
-
-    final lowerServer = server.toLowerCase();
-    final lowerLoc = location.toLowerCase();
-
-    if (lowerServer.contains('roku') || lowerLoc.contains(':8060')) {
-      deviceType = DeviceType.roku;
-      name = 'Roku Device';
-      port = 8060;
-    } else if (lowerServer.contains('samsung') ||
-        lowerLoc.contains('samsung') ||
-        lowerLoc.contains(':8001') ||
-        lowerLoc.contains(':8002')) {
-      deviceType = DeviceType.samsung;
-      name = 'Samsung TV';
-      if (lowerLoc.contains(':8002')) {
-        port = 8002;
-      } else if (lowerLoc.contains(':8001')) {
-        port = 8001;
-      } else {
-        port = 8002;
-      }
-    } else if (lowerServer.contains('webos') || lowerLoc.contains(':3000')) {
-      deviceType = DeviceType.lg;
-      name = 'LG webOS TV';
-      port = 3000;
-    } else if (lowerLoc.contains(':7345')) {
-      deviceType = DeviceType.vizio;
-      name = 'Vizio SmartCast TV';
-      port = 7345;
-    } else {
-      return;
-    }
-
-    final existing = state.devices;
-    if (existing.any((d) => d.ip == ip && d.port == port)) return;
-
-    final device = Device(
-      id: '$ip:$port',
-      name: name,
-      type: deviceType,
-      model: 'SSDP Discovered',
-      ip: ip,
-      port: port,
-    );
-
-    state = state.copyWith(devices: [...existing, device]);
-    log.d('ScannerNotifier: Found device "$name" at $ip:$port (${deviceType.name}) via SSDP');
+    final device = parseSsdpResponse(response, sourceIp);
+    if (device == null) return;
+    _addDevice(device, via: 'SSDP');
   }
 }
 
