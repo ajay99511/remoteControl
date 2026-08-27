@@ -108,6 +108,65 @@ void main() {
     });
   });
 
+  group('stable identity', () {
+    test('takes the device uuid from the SSDP USN header', () {
+      final device = parseSsdpResponse(
+        ssdp([
+          'SERVER: Roku UPnP/1.0',
+          'USN: uuid:roku:ecp:1GU48T017973::urn:roku-com:device:player:1-0',
+        ]),
+        '192.168.1.50',
+      );
+
+      expect(device?.uid, 'ssdp:roku:ecp:1GU48T017973');
+    });
+
+    test('the same TV at a new address keeps its identity', () {
+      const usn = 'USN: uuid:2f402f80-da50-11e1-9b23-001788255acc';
+      final before = parseSsdpResponse(
+        ssdp(['SERVER: Roku', usn]),
+        '192.168.1.50',
+      );
+      // The router reboots and hands the TV a different lease.
+      final after = parseSsdpResponse(
+        ssdp(['SERVER: Roku', usn]),
+        '192.168.1.77',
+      );
+
+      expect(after!.uid, before!.uid);
+      expect(after.credentialKey, before.credentialKey);
+      expect(after.ip, isNot(before.ip));
+    });
+
+    test('falls back to the address when no USN is offered', () {
+      final device = parseSsdpResponse(ssdp(['SERVER: Roku']), '192.168.1.50');
+
+      expect(device?.uid, isNull);
+      expect(device?.credentialKey, '192.168.1.50');
+    });
+
+    test('ignores a USN that carries no device part', () {
+      final device = parseSsdpResponse(
+        ssdp(['SERVER: Roku', 'USN: uuid:']),
+        '192.168.1.50',
+      );
+
+      expect(device?.uid, isNull);
+    });
+
+    test('mDNS uses the Bonjour instance name as identity', () {
+      final device = parseMdnsService(
+        name: 'Living Room Roku',
+        host: 'roku.local',
+        port: 8060,
+        type: '_roku._tcp',
+        addresses: ['192.168.1.50'],
+      );
+
+      expect(device?.uid, 'mdns:_roku._tcp/Living Room Roku');
+    });
+  });
+
   group('parseMdnsService', () {
     test('promotes a Roku on port 80 to 8060', () {
       final device = parseMdnsService(
@@ -227,6 +286,36 @@ void main() {
       const known = [roku];
 
       expect(identical(mergeDiscovered(known, roku), known), isTrue);
+    });
+
+    test('recognises a known TV that moved to a new address', () {
+      const known = Device(
+        id: 'ssdp:abc',
+        name: 'Roku',
+        type: DeviceType.roku,
+        model: 'SSDP Discovered',
+        ip: '192.168.1.50',
+        port: 8060,
+        uid: 'ssdp:abc',
+      );
+      const movedSameTv = Device(
+        id: 'ssdp:abc',
+        name: 'Roku',
+        type: DeviceType.roku,
+        model: 'SSDP Discovered',
+        ip: '192.168.1.77',
+        port: 8060,
+        uid: 'ssdp:abc',
+      );
+
+      final merged = mergeDiscovered([known], movedSameTv);
+
+      expect(merged, hasLength(1), reason: 'one television, one entry');
+      expect(
+        merged.single.ip,
+        '192.168.1.77',
+        reason: 'the newer sighting knows where it actually is now',
+      );
     });
 
     test('keeps genuinely different hosts apart', () {

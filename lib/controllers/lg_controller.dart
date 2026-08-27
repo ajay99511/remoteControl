@@ -27,18 +27,25 @@ class LgController with HealthReporting implements DeviceController {
   /// the real socket is opened by [WebSocketChannel.connect].
   final WebSocketChannel Function(Uri)? _channelFactory;
 
+  /// Where this device's secrets are filed. Defaults to [host] so existing
+  /// call sites behave as before, but the factory passes Device.credentialKey
+  /// so a pairing token survives the router handing the TV a new address.
+  final String _credentialKey;
+
   LgController({
     required this.host,
     this.port = 3000,
     required DevicePersistenceService persistence,
     WebSocketChannel Function(Uri)? channelFactory,
+    String? credentialKey,
   }) : _persistence = persistence,
-       _channelFactory = channelFactory;
+       _channelFactory = channelFactory,
+       _credentialKey = credentialKey ?? host;
 
   @override
   Future<void> connect() async {
     try {
-      _clientKey = await _persistence.loadLgClientKey(host);
+      _clientKey = await _persistence.loadLgClientKey(_credentialKey);
       final wsUrl = Uri.parse('ws://$host:$port');
       _channel =
           _channelFactory?.call(wsUrl) ?? WebSocketChannel.connect(wsUrl);
@@ -90,7 +97,9 @@ class LgController with HealthReporting implements DeviceController {
             final payload = data['payload'] as Map<String, dynamic>?;
             _clientKey = payload?['client-key'] as String?;
             if (_clientKey != null) {
-              unawaited(_persistence.saveLgClientKey(host, _clientKey!));
+              unawaited(
+                _persistence.saveLgClientKey(_credentialKey, _clientKey!),
+              );
             }
             _connected = true;
             if (!completer.isCompleted) completer.complete();

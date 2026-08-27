@@ -63,6 +63,13 @@ class Device {
   final String? ip;
   final int? port;
 
+  /// A identifier that survives the device changing address.
+  ///
+  /// SSDP responses carry one in their USN header; mDNS carries the Bonjour
+  /// instance name. Null for manually entered devices, where we have nothing
+  /// but an address to go on.
+  final String? uid;
+
   const Device({
     required this.id,
     required this.name,
@@ -70,7 +77,21 @@ class Device {
     required this.model,
     this.ip,
     this.port,
+    this.uid,
   });
+
+  /// The key under which this device's secrets are filed.
+  ///
+  /// Prefers [uid] so a pairing token, an LG client key and a TOFU
+  /// certificate pin stay attached to the television rather than to whatever
+  /// address the router last handed it. Keying on the address meant a DHCP
+  /// lease renewal orphaned all three: the TV re-prompted for pairing, and
+  /// the certificate pin silently re-pinned against the "new" host, which
+  /// quietly weakens the very control that TOFU exists to provide.
+  ///
+  /// Falls back to the address when there is no stable id, which is no worse
+  /// than the previous behaviour.
+  String get credentialKey => uid ?? ip ?? id;
 
   Map<String, dynamic> toJson() => {
     'id': id,
@@ -79,6 +100,7 @@ class Device {
     'model': model,
     'ip': ip,
     'port': port,
+    'uid': uid,
   };
 
   factory Device.fromJson(Map<String, dynamic> json) => Device(
@@ -88,6 +110,7 @@ class Device {
     model: json['model'] as String,
     ip: json['ip'] as String?,
     port: json['port'] as int?,
+    uid: json['uid'] as String?,
   );
 
   Device copyWith({
@@ -97,6 +120,7 @@ class Device {
     String? model,
     String? ip,
     int? port,
+    String? uid,
   }) => Device(
     id: id ?? this.id,
     name: name ?? this.name,
@@ -104,6 +128,7 @@ class Device {
     model: model ?? this.model,
     ip: ip ?? this.ip,
     port: port ?? this.port,
+    uid: uid ?? this.uid,
   );
 
   @override
@@ -116,10 +141,11 @@ class Device {
           type == other.type &&
           model == other.model &&
           ip == other.ip &&
-          port == other.port;
+          port == other.port &&
+          uid == other.uid;
 
   @override
-  int get hashCode => Object.hash(id, name, type, model, ip, port);
+  int get hashCode => Object.hash(id, name, type, model, ip, port, uid);
 
   @override
   String toString() =>

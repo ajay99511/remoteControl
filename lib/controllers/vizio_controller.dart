@@ -31,14 +31,21 @@ class VizioController with HealthReporting implements DeviceController {
 
   final DevicePersistenceService _persistence;
 
+  /// Where this device's secrets are filed. Defaults to [host] so existing
+  /// call sites behave as before, but the factory passes Device.credentialKey
+  /// so a pairing token survives the router handing the TV a new address.
+  final String _credentialKey;
+
   VizioController({
     required this.host,
     required DevicePersistenceService persistence,
     this.port = 7345,
     http.Client? client,
+    String? credentialKey,
   }) : _persistence = persistence,
        _injectedClient = client,
-       _client = client;
+       _client = client,
+       _credentialKey = credentialKey ?? host;
 
   Uri _smartCastUri(String path) => Uri.parse('https://$host:$port/$path');
 
@@ -49,8 +56,8 @@ class VizioController with HealthReporting implements DeviceController {
     // HandshakeException before any of the status handling below ever ran.
     // Pin it on first use, the same way Samsung does.
     final pinning = PinningSession(
-      host: host,
-      stored: await _persistence.loadCertFingerprint(host),
+      host: _credentialKey,
+      stored: await _persistence.loadCertFingerprint(_credentialKey),
     );
     _client = _injectedClient ?? IOClient(pinning.createClient());
 
@@ -58,7 +65,7 @@ class VizioController with HealthReporting implements DeviceController {
       // Use the token from a previous pairing, if any. This storage API
       // existed but had no caller, so _authToken was permanently null and the
       // AUTH header was never sent.
-      _authToken = await _persistence.loadVizioToken(host);
+      _authToken = await _persistence.loadVizioToken(_credentialKey);
 
       final response = await _client!
           .get(

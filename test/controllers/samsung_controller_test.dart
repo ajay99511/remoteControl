@@ -75,6 +75,41 @@ void main() {
     });
   });
 
+  group('SamsungController credential scoping', () {
+    test(
+      'files the pairing token under the stable id, not the address',
+      () async {
+        final scoped = SamsungController(
+          host: host,
+          persistence: mockPersistence,
+          channelFactory: (_) => mockChannel,
+          credentialKey: 'ssdp:roku:ecp:ABC123',
+        );
+        when(
+          mockPersistence.loadSamsungToken(any),
+        ).thenAnswer((_) async => 't');
+
+        await scoped.connect();
+
+        // Keying on the address meant a DHCP renewal orphaned the token and the
+        // TV prompted for pairing again - and the old token was left addressed
+        // to whatever host next held that IP.
+        verify(
+          mockPersistence.loadSamsungToken('ssdp:roku:ecp:ABC123'),
+        ).called(1);
+        verifyNever(mockPersistence.loadSamsungToken(host));
+      },
+    );
+
+    test('still uses the address when no stable id was discovered', () async {
+      when(mockPersistence.loadSamsungToken(any)).thenAnswer((_) async => 't');
+
+      await controller.connect();
+
+      verify(mockPersistence.loadSamsungToken(host)).called(1);
+    });
+  });
+
   group('SamsungController', () {
     test('connect() persists pairing token from stream', () async {
       final controllerStream = StreamController<dynamic>();

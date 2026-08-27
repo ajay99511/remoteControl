@@ -28,13 +28,20 @@ class SamsungController with HealthReporting implements DeviceController {
 
   final WebSocketChannel Function(Uri)? _channelFactory;
 
+  /// Where this device's secrets are filed. Defaults to [host] so existing
+  /// call sites behave as before, but the factory passes Device.credentialKey
+  /// so a pairing token survives the router handing the TV a new address.
+  final String _credentialKey;
+
   SamsungController({
     required this.host,
     this.port = 8001,
     required DevicePersistenceService persistence,
     WebSocketChannel Function(Uri)? channelFactory,
+    String? credentialKey,
   }) : _persistence = persistence,
-       _channelFactory = channelFactory;
+       _channelFactory = channelFactory,
+       _credentialKey = credentialKey ?? host;
 
   static const Map<RemoteKey, String> _keyMap = {
     RemoteKey.up: 'KEY_UP',
@@ -102,7 +109,7 @@ class SamsungController with HealthReporting implements DeviceController {
   Future<void> connect() async {
     try {
       final nameBase64 = base64Encode(utf8.encode(_clientName));
-      final token = await _persistence.loadSamsungToken(host);
+      final token = await _persistence.loadSamsungToken(_credentialKey);
       final tokenQuery = token != null ? '&token=$token' : '';
       final query = 'name=$nameBase64$tokenQuery';
 
@@ -149,8 +156,8 @@ class SamsungController with HealthReporting implements DeviceController {
   /// to plaintext on that exception.
   Future<void> _connectSecure(Uri wssUrl) async {
     final pinning = PinningSession(
-      host: host,
-      stored: await _persistence.loadCertFingerprint(host),
+      host: _credentialKey,
+      stored: await _persistence.loadCertFingerprint(_credentialKey),
     );
 
     // Ownership of the socket transfers to _channel below, and
@@ -201,7 +208,7 @@ class SamsungController with HealthReporting implements DeviceController {
           final payload = data['data'] as Map<String, dynamic>?;
           final token = payload?['token'] as String?;
           if (token != null) {
-            unawaited(_persistence.saveSamsungToken(host, token));
+            unawaited(_persistence.saveSamsungToken(_credentialKey, token));
           }
         }
       },

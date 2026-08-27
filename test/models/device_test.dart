@@ -140,6 +140,38 @@ void main() {
     });
   });
 
+  group('credentialKey', () {
+    test('prefers the stable id so secrets follow the television', () {
+      const withUid = Device(
+        id: 'ssdp:abc',
+        name: 'Roku',
+        type: DeviceType.roku,
+        model: 'Ultra',
+        ip: '192.168.1.50',
+        uid: 'ssdp:abc',
+      );
+
+      expect(withUid.credentialKey, 'ssdp:abc');
+      // A DHCP renewal must not orphan the pairing token or the cert pin.
+      expect(withUid.copyWith(ip: '192.168.1.77').credentialKey, 'ssdp:abc');
+    });
+
+    test('falls back to the address when there is no stable id', () {
+      expect(roku.credentialKey, '192.168.1.50');
+    });
+
+    test('falls back to the id when there is no address either', () {
+      const manual = Device(
+        id: 'manual-1',
+        name: 'Manual',
+        type: DeviceType.roku,
+        model: 'Custom IP',
+      );
+
+      expect(manual.credentialKey, 'manual-1');
+    });
+  });
+
   group('kDefaultPorts', () {
     test('covers every network-controllable vendor', () {
       expect(kDefaultPorts[DeviceType.roku], 8060);

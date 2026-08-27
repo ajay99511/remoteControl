@@ -50,14 +50,39 @@ Device? parseSsdpResponse(String response, String sourceIp) {
     return null;
   }
 
+  final uid = _uidFromUsn(headers['USN']);
+
   return Device(
-    id: '$sourceIp:$port',
+    id: uid ?? '$sourceIp:$port',
     name: name,
     type: type,
     model: 'SSDP Discovered',
     ip: sourceIp,
     port: port,
+    uid: uid,
   );
+}
+
+/// Extracts the device identity from an SSDP `USN` header.
+///
+/// UPnP defines USN as `uuid:<device-uuid>[::<service>]`, and every responder
+/// we care about sends one - Roku puts its serial there
+/// (`uuid:roku:ecp:1GU48T017973`). It is the only stable identifier available
+/// at discovery time, and the previous parser read the header and discarded
+/// it, leaving the IP address as the device's identity.
+String? _uidFromUsn(String? usn) {
+  if (usn == null) return null;
+  final trimmed = usn.trim();
+  if (trimmed.isEmpty) return null;
+
+  // Strip the trailing ::service qualifier; the device part is what is stable.
+  final devicePart = trimmed.split('::').first.trim();
+  if (devicePart.isEmpty) return null;
+
+  final withoutScheme = devicePart.toLowerCase().startsWith('uuid:')
+      ? devicePart.substring(5).trim()
+      : devicePart;
+  return withoutScheme.isEmpty ? null : 'ssdp:$withoutScheme';
 }
 
 /// Splits an SSDP response into upper-cased header keys.
@@ -108,13 +133,19 @@ Device? parseMdnsService({
   }
   // _airplay announcements carry no vendor, so they stay unknown.
 
+  // The Bonjour instance name is the identity a client re-resolves against,
+  // so it survives an address change. It does not survive the user renaming
+  // the TV - but renames are rare and DHCP renewals are not.
+  final uid = 'mdns:$type/$name';
+
   return Device(
-    id: '$ip:$resolvedPort',
+    id: uid,
     name: name,
     type: deviceType,
     model: type.replaceAll('._tcp', '').replaceAll('_', ''),
     ip: ip,
     port: resolvedPort,
+    uid: uid,
   );
 }
 
@@ -129,13 +160,21 @@ Device? parseMdnsService({
 /// A later announcement only fills gaps; it never overwrites a more specific
 /// answer that arrived first.
 List<Device> mergeDiscovered(List<Device> known, Device candidate) {
-  final index = known.indexWhere((d) => d.ip == candidate.ip);
+  // Match on the stable id when both sides have one, so the same television
+  // answering on a new address is recognised rather than listed twice.
+  var index = candidate.uid == null
+      ? -1
+      : known.indexWhere((d) => d.uid == candidate.uid);
+  if (index < 0) index = known.indexWhere((d) => d.ip == candidate.ip);
   if (index < 0) return [...known, candidate];
 
   final existing = known[index];
   final merged = existing.copyWith(
     type: existing.type == DeviceType.unknown ? candidate.type : existing.type,
     name: existing.name.isEmpty ? candidate.name : existing.name,
+    uid: existing.uid ?? candidate.uid,
+    // A device that moved reports its new address; trust the newer sighting.
+    ip: candidate.ip,
     port:
         existing.type == DeviceType.unknown &&
             candidate.type != DeviceType.unknown
