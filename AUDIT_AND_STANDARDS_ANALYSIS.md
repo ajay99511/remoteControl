@@ -29,10 +29,10 @@ finding, each with a test confirmed failing against the unfixed code first.
 
 | Measure | Before | After |
 |---|---:|---:|
-| Tests passing | 20 | **164** |
-| Line coverage | 27.2% | **73.6%** |
+| Tests passing | 20 | **232** |
+| Line coverage | 27.2% | **76.5%** |
 | `flutter analyze` | 15 issues (default lints) | **0** (with `dead_code`, `unawaited_futures`, `strict-casts` promoted to errors) |
-| Suite wall clock | ~30 s (real sockets) | ~8 s (no real I/O) |
+| Suite wall clock | ~30 s (real sockets) | ~14 s (no real I/O) |
 | CI | none | format + analyze + test + coverage floor + APK build |
 | Files at 0% coverage | `remote.dart`, `remote_buttons.dart`, `lg_controller.dart`, `vizio_controller.dart` | two unreachable stubs |
 
@@ -94,6 +94,45 @@ information the device was already sending it.
 also requires the signed manifest block LG's own app sends. That blob could
 not be reproduced reliably, and a wrong one is worse than none, so it is
 deliberately absent. Pairing against a real LG TV is the check that settles it.
+
+### Third follow-up: remembering devices and reconnecting to them
+
+A review of the whole path a user actually walks - open the app, find the
+television, connect, control it, come back tomorrow - against how the vendors'
+own mobile remotes behave. Three gaps, all in the space between "the protocol
+works" and "the product works".
+
+| # | Finding | Status |
+|---|---|---|
+| Q-1 | **Only one device was ever remembered.** `last_device_v1` held a single entry, for auto-reconnect. The discovery screen therefore opened blank every time and made the user wait out a multi-second sweep, however many times they had connected before. Devices the user has connected to are now kept in a bounded MRU list (8), keyed on `credentialKey` so a television that moved between DHCP leases updates its entry rather than appearing once per address it has held. The scanner seeds from it before probing; a live sighting merges over the remembered entry. Entries not yet confirmed on this network are marked "Saved", on screen and in their semantics label. | Fixed |
+| Q-2 | **A remembered device that moved was unreachable.** Identity has been stable since N-1, but nothing used it to go and look. Reconnecting to a device whose address the router had reassigned meant five attempts against whatever now lives there - fifteen seconds of backoff ending in "could not connect", for a TV that was powered on two addresses away. A connect chain now re-resolves once, before spending its retry budget, accepting only a response whose stable id matches. Only the address is adopted; name, model and the paired port are ours already. | Fixed |
+| Q-3 | **LG had no D-pad at all.** webOS exposes no SSAP URI for the arrow keys; they exist only on the pointer input socket, and this controller never requested it. After H-1 removed the 3D-toggle mis-mapping, up/down/left/right honestly reported "unsupported" - a remote with no navigation. The socket is now requested at registration and the arrows travel over it. OK moves there too: `sendEnterKey` is an IME operation that commits text in a focused field, so on a home screen it does nothing. | Fixed |
+
+Two latent defects surfaced while doing the above, both fixed:
+
+- **An in-flight UDP socket could be orphaned.** Binding is asynchronous, and a
+  `stopScan` or rescan landing in that window left the probe to adopt a socket
+  belonging to a scan that no longer existed, with nothing holding a reference
+  to close it. A scan generation counter closes it instead. Two existing
+  lifecycle tests caught this once an added `await` shifted the interleaving.
+- **The "is this the same device" rule was about to be written twice** - once in
+  `mergeDiscovered`, once in the scanner's remembered-device bookkeeping.
+  Extracted as `indexOfDevice` before the second copy existed.
+
+**Unverified, and it needs hardware:** the pointer socket's line protocol and
+button names are written from the documented format, not from a session with a
+real television. Every part of it degrades rather than fails - a TV that will
+not grant the socket leaves OK on the IME path exactly as before, and
+`supportedKeys` only admits the arrows once the socket is open - so if the
+format is wrong the arrows stay unavailable, which is where they already were.
+This joins the webOS signed-manifest question and the Android multicast lock as
+things a TV and a phone settle, not more code.
+
+**Two facts about the test harness**, recorded because they cost time twice:
+`fake_async`'s `elapse()` does not drain the microtask queue on the way out, so
+a completion landing after the last timer needs an explicit `flushMicrotasks()`;
+and awaiting a `StreamSubscription.cancel()` whose controller was built outside
+the fake zone suspends on a future the fake clock cannot advance.
 
 **Two corrections to this audit were made during remediation**, both marked
 in place where the original claim appears — the H-3 caret/reversion detail,

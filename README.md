@@ -10,7 +10,7 @@ vendor's own control protocol.
 |---|---|---|
 | **Roku** | ECP over HTTP, port 8060 | Working — keys, text entry, app launch |
 | **Samsung** (Tizen) | WebSocket, `wss://` 8002 with TOFU pinning, `ws://` 8001 legacy | Working — keys, text entry, app launch |
-| **LG** (webOS) | SSAP over WebSocket, port 3000 | Partial — volume, channel, playback, OK/select, app launch. **D-pad arrows are not implemented**: webOS routes them over a separate pointer-input socket. They report as unsupported rather than firing an unrelated command. |
+| **LG** (webOS) | SSAP over WebSocket, port 3000, plus the pointer input socket | Working — volume, channel, playback, app launch, and the D-pad. webOS carries the arrows on a second socket requested at registration; OK goes the same way, since `sendEnterKey` is an IME operation that does nothing without a focused text field. A TV that will not grant the socket keeps OK on the IME path and reports the arrows as unsupported. Unverified against real hardware. |
 | **Vizio** (SmartCast) | REST over TLS, port 7345, TOFU pinning | Partial — key commands work. Text entry and app launch report unsupported: SmartCast exposes no text endpoint on this API, and app launch needs per-app payloads this controller does not carry. Pairing (PIN entry) is not implemented, so a TV that has never been paired returns 401 and reports that it needs pairing. |
 | **Fire TV** | — | Not implemented. Reports unsupported. |
 | **Google TV / Android TV** | — | Not implemented. Reports unsupported. Note that discovery maps every `_googlecast._tcp` responder here, so ordinary Chromecasts appear and cannot be controlled. |
@@ -20,6 +20,19 @@ Discovered devices are named from their own UPnP / ECP description, so the
 list shows what the owner called the TV rather than a generic vendor label.
 Identity comes from the SSDP `USN` or the description's `UDN`, so a DHCP lease
 renewal does not orphan the pairing token or the certificate pin.
+
+## Remembering devices
+
+Devices you have connected to are kept in a bounded most-recently-used list
+(8) in secure storage, keyed on that stable identity rather than the address.
+They appear on the discovery screen immediately, before any probe has been
+answered, marked **Saved** until this scan hears from them.
+
+If a remembered device has moved — a DHCP lease renewal is the ordinary case —
+a connect attempt re-resolves it once over SSDP before spending its retry
+budget, and accepts only a response whose stable id matches. Without that, a
+television that was powered on and two addresses away produced fifteen seconds
+of backoff and "could not connect".
 
 ## Architecture
 
