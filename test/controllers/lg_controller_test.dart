@@ -61,6 +61,63 @@ void main() {
     );
   });
 
+  group('SSAP permissions', () {
+    test('cover every URI the controller can send', () {
+      // webOS denies calls outside the granted set, so a URI with no covering
+      // permission is a button that silently does nothing on real hardware.
+      for (final uri in LgController.ssapUris) {
+        final prefix = ssapUriPermissions.keys.firstWhere(
+          uri.startsWith,
+          orElse: () => '',
+        );
+        expect(prefix, isNotEmpty, reason: '$uri maps to no known permission');
+        expect(
+          ssapPermissions,
+          contains(ssapUriPermissions[prefix]),
+          reason:
+              '$uri needs ${ssapUriPermissions[prefix]}, which is not '
+              'requested at registration',
+        );
+      }
+    });
+
+    test('include the two that were missing', () {
+      // RemoteKey.ok routes to ssap://com.webos.service.ime/sendEnterKey, so
+      // without CONTROL_INPUT_TEXT a real TV denied the OK button.
+      expect(ssapPermissions, contains('CONTROL_INPUT_TEXT'));
+      expect(ssapPermissions, contains('CONTROL_INPUT_MEDIA_PLAYBACK'));
+    });
+
+    test('request nothing the controller does not use', () {
+      // CHECK_3D was left over from the set3DOn/set3DOff mapping removed as
+      // audit finding H-1; READ_INSTALLED_APPS was never read.
+      expect(ssapPermissions, isNot(contains('CHECK_3D')));
+      expect(ssapPermissions, isNot(contains('READ_INSTALLED_APPS')));
+
+      final used = ssapUriPermissions.entries
+          .where((e) => LgController.ssapUris.any((u) => u.startsWith(e.key)))
+          .map((e) => e.value)
+          .toSet();
+      expect(ssapPermissions.toSet(), used);
+    });
+
+    test('the registration payload carries them', () {
+      fakeAsync((async) {
+        final inbound = connectAndRegister(async);
+
+        final register = verify(mockSink.add(captureAny)).captured
+            .whereType<String>()
+            .map((f) => jsonDecode(f) as Map<String, dynamic>)
+            .firstWhere((f) => f['type'] == 'register');
+        final payload = register['payload'] as Map<String, dynamic>;
+        final manifest = payload['manifest'] as Map<String, dynamic>;
+
+        expect(manifest['permissions'], ssapPermissions);
+        inbound.close();
+      });
+    });
+  });
+
   group('LgController', () {
     test('registers and persists the client key returned by the TV', () {
       fakeAsync((async) {

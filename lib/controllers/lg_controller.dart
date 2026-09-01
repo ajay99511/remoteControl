@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../core/app_logger.dart';
@@ -10,6 +11,43 @@ import '../models/remote_key.dart';
 import '../services/device_persistence_service.dart';
 import 'controller_health.dart';
 import 'device_controller.dart';
+
+/// Permissions requested when registering with a webOS TV.
+///
+/// webOS grants per-permission and denies calls outside the granted set, so
+/// this list has to cover every SSAP URI the controller sends. It did not:
+///
+///   - `ssap://com.webos.service.ime/*` needs CONTROL_INPUT_TEXT, which was
+///     absent. RemoteKey.ok and RemoteKey.select both route to
+///     `sendEnterKey`, so a real TV denied the OK button.
+///   - `ssap://media.controls/*` needs CONTROL_INPUT_MEDIA_PLAYBACK, also
+///     absent, so play/rewind/fast-forward were denied.
+///
+/// It also asked for two it does not use: CHECK_3D, left over from the
+/// set3DOn/set3DOff mapping removed as audit finding H-1, and
+/// READ_INSTALLED_APPS, which nothing here reads. Asking a user to grant
+/// capabilities the app never exercises is its own small breach of trust.
+///
+/// [ssapUriPermissions] records which permission covers which URI prefix, and
+/// a test asserts the two stay in step.
+const ssapPermissions = [
+  'LAUNCH',
+  'CONTROL_AUDIO',
+  'CONTROL_POWER',
+  'CONTROL_INPUT_TV',
+  'CONTROL_INPUT_MEDIA_PLAYBACK',
+  'CONTROL_INPUT_TEXT',
+];
+
+/// URI prefix -> the permission webOS requires for it.
+const ssapUriPermissions = <String, String>{
+  'ssap://system.launcher/': 'LAUNCH',
+  'ssap://audio/': 'CONTROL_AUDIO',
+  'ssap://system/': 'CONTROL_POWER',
+  'ssap://tv/': 'CONTROL_INPUT_TV',
+  'ssap://media.controls/': 'CONTROL_INPUT_MEDIA_PLAYBACK',
+  'ssap://com.webos.service.ime/': 'CONTROL_INPUT_TEXT',
+};
 
 /// LG webOS TV controller via SSAP WebSocket on port 3000 (Requirement 2.4).
 class LgController with HealthReporting implements DeviceController {
@@ -58,16 +96,7 @@ class LgController with HealthReporting implements DeviceController {
           "forcePairing": false,
           "pairingType": "PROMPT",
           "client-key": _clientKey,
-          "manifest": {
-            "permissions": [
-              "LAUNCH",
-              "CONTROL_AUDIO",
-              "CONTROL_POWER",
-              "CONTROL_INPUT_TV",
-              "READ_INSTALLED_APPS",
-              "CHECK_3D",
-            ],
-          },
+          "manifest": {"permissions": ssapPermissions},
         },
       };
 
@@ -237,6 +266,15 @@ class LgController with HealthReporting implements DeviceController {
   // navigation keys toggled the TV's 3D mode - not navigation, and hard for a
   // user to undo. Until the pointer socket is implemented, these keys report
   // as unsupported so the UI can say so instead of firing something unrelated.
+  /// The SSAP URIs this controller can send, exposed so a test can check
+  /// every one of them is covered by [ssapPermissions].
+  @visibleForTesting
+  static Iterable<String> get ssapUris => [
+    ..._ssapUris.values,
+    'ssap://com.webos.service.ime/insertText',
+    'ssap://system.launcher/launch',
+  ];
+
   static const Map<RemoteKey, String> _ssapUris = {
     RemoteKey.volumeUp: 'ssap://audio/volumeUp',
     RemoteKey.volumeDown: 'ssap://audio/volumeDown',
