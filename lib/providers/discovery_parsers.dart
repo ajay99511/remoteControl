@@ -85,6 +85,22 @@ String? _uidFromUsn(String? usn) {
   return withoutScheme.isEmpty ? null : 'ssdp:$withoutScheme';
 }
 
+/// The UPnP device description URL an SSDP response points at.
+///
+/// Fetching it is how a device's real name is obtained; without it the
+/// scanner can only guess from the SERVER header and label every Samsung on
+/// the network "Samsung TV".
+Uri? ssdpLocationOf(String response) {
+  final raw = _parseHeaders(response)['LOCATION'];
+  if (raw == null || raw.isEmpty) return null;
+  final uri = Uri.tryParse(raw);
+  if (uri == null || !uri.hasScheme || uri.host.isEmpty) return null;
+  // Only http(s); a LOCATION naming any other scheme is not something to
+  // dereference on the strength of a broadcast from an unauthenticated host.
+  if (uri.scheme != 'http' && uri.scheme != 'https') return null;
+  return uri;
+}
+
 /// Splits an SSDP response into upper-cased header keys.
 ///
 /// Splits on `\r?\n` rather than `\r\n`: a responder that terminates lines

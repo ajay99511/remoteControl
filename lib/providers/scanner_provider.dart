@@ -9,6 +9,7 @@ import 'package:permission_handler/permission_handler.dart' hide ServiceStatus;
 
 import '../core/app_logger.dart';
 import '../models/device.dart';
+import '../services/device_description.dart';
 import 'discovery_parsers.dart';
 
 /// Immutable state for the device scanner.
@@ -57,6 +58,11 @@ final mdnsEnabledProvider = Provider<bool>(
   (_) => !kIsWeb && !Platform.isWindows,
 );
 
+/// Reads a discovered device's self-description. Overridden in tests.
+final deviceDescriptionFetcherProvider = Provider<DeviceDescriptionFetcher>(
+  (_) => fetchDeviceDescription,
+);
+
 /// Riverpod [Notifier] that manages mDNS / NSD and SSDP device discovery.
 class ScannerNotifier extends Notifier<ScannerState> {
   static const _scanWindow = Duration(seconds: 10);
@@ -65,6 +71,20 @@ class ScannerNotifier extends Notifier<ScannerState> {
   static const _ssdpProbeInterval = Duration(milliseconds: 500);
   static const _ssdpPort = 1900;
   static const _ssdpMulticast = '239.255.255.250';
+
+  /// Search targets, most specific first.
+  ///
+  /// `ssdp:all` alone asks every UPnP device on the segment to answer, which
+  /// is noisy, slower to filter, and something some access points rate-limit.
+  /// Real remotes ask for what they can control: Roku defines `roku:ecp`, and
+  /// DIAL is the multiscreen standard Roku, Samsung and Vizio all implement.
+  /// `ssdp:all` stays last so anything not covered still turns up.
+  static const _searchTargets = [
+    'roku:ecp',
+    'urn:dial-multiscreen-org:service:dial:1',
+    'urn:schemas-upnp-org:device:MediaRenderer:1',
+    'ssdp:all',
+  ];
 
   final List<Discovery> _discoveries = [];
 
@@ -80,11 +100,17 @@ class ScannerNotifier extends Notifier<ScannerState> {
 
   late final DatagramSocketBinder _bindSocket;
   late final bool _mdnsEnabled;
+  late final DeviceDescriptionFetcher _fetchDescription;
+
+  /// Description URLs already requested. Devices answer every search target,
+  /// so without this a single TV would be fetched four times per round.
+  final Set<Uri> _describing = {};
 
   @override
   ScannerState build() {
     _bindSocket = ref.read(ssdpSocketBinderProvider);
     _mdnsEnabled = ref.read(mdnsEnabledProvider);
+    _fetchDescription = ref.read(deviceDescriptionFetcherProvider);
 
     ref.onDispose(() {
       _disposed = true;
@@ -131,6 +157,7 @@ class ScannerNotifier extends Notifier<ScannerState> {
     }
     if (_disposed) return;
 
+    _describing.clear();
     state = state.copyWith(isScanning: true, devices: [], clearError: true);
 
     const serviceTypes = [
@@ -237,25 +264,9 @@ class ScannerNotifier extends Notifier<ScannerState> {
       socket.broadcastEnabled = true;
       _ssdpSocket = socket;
 
-      const searchMessage =
-          'M-SEARCH * HTTP/1.1\r\n'
-          'HOST: $_ssdpMulticast:$_ssdpPort\r\n'
-          'MAN: "ssdp:discover"\r\n'
-          'MX: 3\r\n'
-          'ST: ssdp:all\r\n\r\n';
-
-      final data = utf8.encode(searchMessage);
-      final multicastAddress = InternetAddress(_ssdpMulticast);
-
-      // Several probes: a single M-SEARCH is routinely dropped on Wi-Fi.
-      for (var i = 0; i < _ssdpProbeCount; i++) {
-        if (_disposed || _ssdpSocket == null) return;
-        socket.send(data, multicastAddress, _ssdpPort);
-        if (i < _ssdpProbeCount - 1) {
-          await Future<void>.delayed(_ssdpProbeInterval);
-        }
-      }
-
+      // Listen before probing. Sending three rounds of probes first and only
+      // then attaching the listener meant the window where a prompt responder
+      // replies was open before anything was reading the socket.
       _ssdpSub = socket.listen((event) {
         if (event != RawSocketEvent.read) return;
         final datagram = socket.receive();
@@ -274,15 +285,78 @@ class ScannerNotifier extends Notifier<ScannerState> {
 
       _ssdpDeadline?.cancel();
       _ssdpDeadline = Timer(_ssdpListenWindow, _releaseSsdp);
+
+      final multicastAddress = InternetAddress(_ssdpMulticast);
+
+      // One probe per search target, repeated: a single M-SEARCH is routinely
+      // dropped on Wi-Fi and UDP offers no retransmission of its own.
+      for (var round = 0; round < _ssdpProbeCount; round++) {
+        for (final target in _searchTargets) {
+          if (_disposed || _ssdpSocket == null) return;
+          socket.send(
+            utf8.encode(_mSearch(target)),
+            multicastAddress,
+            _ssdpPort,
+          );
+        }
+        if (round < _ssdpProbeCount - 1) {
+          await Future<void>.delayed(_ssdpProbeInterval);
+        }
+      }
     } catch (e, s) {
       log.e('ScannerNotifier: SSDP error', e, s);
     }
   }
 
+  /// An M-SEARCH request for one search target.
+  ///
+  /// MX is the maximum seconds a device may wait before replying; UPnP
+  /// requires 1-5, and the previous single ssdp:all probe used 3, spreading
+  /// every device's answer across three seconds for no benefit.
+  static String _mSearch(String searchTarget) =>
+      'M-SEARCH * HTTP/1.1\r\n'
+      'HOST: $_ssdpMulticast:$_ssdpPort\r\n'
+      'MAN: "ssdp:discover"\r\n'
+      'MX: 2\r\n'
+      'ST: $searchTarget\r\n\r\n';
+
   void _handleSsdpResponse(String response, String sourceIp) {
     final device = parseSsdpResponse(response, sourceIp);
     if (device == null) return;
     _addDevice(device, via: 'SSDP');
+
+    // The response only points at the description; reading it is what turns
+    // "Samsung TV" into the name the owner gave the set. Fired concurrently so
+    // a slow or silent device never holds up the scan.
+    final location = ssdpLocationOf(response);
+    if (location != null) unawaited(_describe(device, location));
+  }
+
+  /// Replaces an inferred placeholder name with what the device calls itself.
+  Future<void> _describe(Device device, Uri location) async {
+    if (!_describing.add(location)) return;
+
+    final description = await _fetchDescription(location);
+    if (description == null || _disposed) return;
+
+    final index = state.devices.indexWhere(
+      (d) => (device.uid != null && d.uid == device.uid) || d.ip == device.ip,
+    );
+    if (index < 0) return;
+
+    final existing = state.devices[index];
+    final enriched = existing.copyWith(
+      name: description.friendlyName,
+      model: description.modelName,
+      uid: existing.uid ?? description.stableId,
+    );
+    if (enriched == existing) return;
+
+    state = state.copyWith(devices: [...state.devices]..[index] = enriched);
+    log.d(
+      'ScannerNotifier: "${existing.name}" describes itself as '
+      '"${enriched.name}"',
+    );
   }
 }
 

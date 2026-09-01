@@ -1,8 +1,13 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:devicecontroller/models/device.dart';
 import 'package:devicecontroller/providers/scanner_provider.dart';
+import 'package:devicecontroller/services/device_description.dart';
 
 import '../fakes/fake_datagram_socket.dart';
 
@@ -10,18 +15,35 @@ void main() {
   late FakeDatagramSocket socket;
 
   /// A container whose network is entirely under the test's control: mDNS off,
-  /// UDP socket faked. Nothing here touches the real network.
-  ProviderContainer makeContainer() => ProviderContainer(
-    overrides: [
-      mdnsEnabledProvider.overrideWithValue(false),
-      ssdpSocketBinderProvider.overrideWithValue(() async => socket),
-    ],
+  /// UDP socket faked, descriptions stubbed. Nothing touches the real network.
+  ProviderContainer makeContainer({DeviceDescription? describesAs}) =>
+      ProviderContainer(
+        overrides: [
+          mdnsEnabledProvider.overrideWithValue(false),
+          ssdpSocketBinderProvider.overrideWithValue(() async => socket),
+          deviceDescriptionFetcherProvider.overrideWithValue(
+            (_) async => describesAs,
+          ),
+        ],
+      );
+
+  /// An SSDP reply as a Roku sends one, pointing at its description.
+  /// An SSDP reply as a Roku sends one, pointing at its description.
+  Datagram ssdpReply(String ip) => Datagram(
+    utf8.encode(
+      'HTTP/1.1 200 OK\r\n'
+      'SERVER: Roku UPnP/1.0 MiniUPnPd/1.4\r\n'
+      'LOCATION: http://$ip:8060/\r\n'
+      'USN: uuid:roku:ecp:1GU48T017973\r\n\r\n',
+    ),
+    InternetAddress(ip),
+    1900,
   );
 
   setUp(() => socket = FakeDatagramSocket());
 
   group('ScannerNotifier SSDP probe', () {
-    test('sends three M-SEARCH probes 500ms apart', () {
+    test('probes every search target, several rounds', () {
       fakeAsync((async) {
         final container = makeContainer();
         addTearDown(container.dispose);
@@ -30,12 +52,39 @@ void main() {
         async.flushMicrotasks();
         async.elapse(const Duration(seconds: 2));
 
+        final sent = socket.sent.map(utf8.decode).toList();
+
+        // Asking only for ssdp:all makes every UPnP device on the segment
+        // answer; real remotes ask for what they can control.
+        expect(sent.where((m) => m.contains('ST: roku:ecp')), hasLength(3));
         expect(
-          socket.sent,
+          sent.where((m) => m.contains('ST: urn:dial-multiscreen-org')),
           hasLength(3),
-          reason: 'a single M-SEARCH is routinely dropped on Wi-Fi',
         );
+        expect(sent.where((m) => m.contains('ST: ssdp:all')), hasLength(3));
         expect(socket.broadcastEnabled, isTrue);
+      });
+    });
+
+    test('sends a well-formed M-SEARCH', () {
+      fakeAsync((async) {
+        final container = makeContainer();
+        addTearDown(container.dispose);
+
+        container.read(scannerProvider.notifier).startScan();
+        async.flushMicrotasks();
+        async.elapse(const Duration(seconds: 2));
+
+        final probe = utf8.decode(socket.sent.first);
+
+        expect(probe, startsWith('M-SEARCH * HTTP/1.1\r\n'));
+        expect(probe, contains('HOST: 239.255.255.250:1900\r\n'));
+        expect(probe, contains('MAN: "ssdp:discover"\r\n'));
+        // UPnP requires MX between 1 and 5.
+        final mx = int.parse(RegExp(r'MX: (\d+)').firstMatch(probe)!.group(1)!);
+        expect(mx, inInclusiveRange(1, 5));
+        // A request must end with a blank line.
+        expect(probe, endsWith('\r\n\r\n'));
       });
     });
 
@@ -54,6 +103,72 @@ void main() {
         expect(socket.closed, isTrue);
       });
     });
+  });
+
+  group('ScannerNotifier device naming', () {
+    test('adopts the name the device gives for itself', () async {
+      final container = makeContainer(
+        describesAs: const DeviceDescription(
+          friendlyName: 'Living Room',
+          modelName: 'Roku Ultra',
+        ),
+      );
+      addTearDown(container.dispose);
+
+      await container.read(scannerProvider.notifier).startScan();
+      socket.deliver(ssdpReply('192.168.1.50'));
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      final device = container.read(scannerProvider).devices.single;
+      // Without reading the description the scanner could only infer from the
+      // SERVER header, so every Roku in the house was "Roku Device".
+      expect(device.name, 'Living Room');
+      expect(device.model, 'Roku Ultra');
+    });
+
+    test(
+      'keeps the inferred name when the device will not describe itself',
+      () async {
+        final container = makeContainer(describesAs: null);
+        addTearDown(container.dispose);
+
+        await container.read(scannerProvider.notifier).startScan();
+        socket.deliver(ssdpReply('192.168.1.50'));
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+
+        final device = container.read(scannerProvider).devices.single;
+        expect(device.name, 'Roku Device');
+        expect(device.type, DeviceType.roku);
+      },
+    );
+
+    test(
+      'describes each device once however many targets it answers',
+      () async {
+        var fetches = 0;
+        final container = ProviderContainer(
+          overrides: [
+            mdnsEnabledProvider.overrideWithValue(false),
+            ssdpSocketBinderProvider.overrideWithValue(() async => socket),
+            deviceDescriptionFetcherProvider.overrideWithValue((_) async {
+              fetches++;
+              return const DeviceDescription(friendlyName: 'Living Room');
+            }),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        await container.read(scannerProvider.notifier).startScan();
+        // A TV answers every search target we send, from the same LOCATION.
+        for (var i = 0; i < 4; i++) {
+          socket.deliver(ssdpReply('192.168.1.50'));
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+
+        expect(fetches, 1, reason: 'one description request per device');
+        expect(container.read(scannerProvider).devices, hasLength(1));
+      },
+    );
   });
 
   group('ScannerNotifier lifecycle', () {
