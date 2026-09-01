@@ -10,11 +10,16 @@ vendor's own control protocol.
 |---|---|---|
 | **Roku** | ECP over HTTP, port 8060 | Working — keys, text entry, app launch |
 | **Samsung** (Tizen) | WebSocket, `wss://` 8002 with TOFU pinning, `ws://` 8001 legacy | Working — keys, text entry, app launch |
-| **LG** (webOS) | SSAP over WebSocket, port 3000 | Partial — volume, channel, playback, app launch. **D-pad arrows are not implemented**: webOS routes them over a separate pointer-input socket. They report as unsupported rather than firing an unrelated command. |
+| **LG** (webOS) | SSAP over WebSocket, port 3000 | Partial — volume, channel, playback, OK/select, app launch. **D-pad arrows are not implemented**: webOS routes them over a separate pointer-input socket. They report as unsupported rather than firing an unrelated command. |
 | **Vizio** (SmartCast) | REST over TLS, port 7345, TOFU pinning | Partial — key commands work. Text entry and app launch report unsupported: SmartCast exposes no text endpoint on this API, and app launch needs per-app payloads this controller does not carry. Pairing (PIN entry) is not implemented, so a TV that has never been paired returns 401 and reports that it needs pairing. |
 | **Fire TV** | — | Not implemented. Reports unsupported. |
 | **Google TV / Android TV** | — | Not implemented. Reports unsupported. Note that discovery maps every `_googlecast._tcp` responder here, so ordinary Chromecasts appear and cannot be controlled. |
 | **IR blaster** | Android `ConsumerIrManager` | Not implemented. There is no platform channel; `connect()` refuses rather than presenting a remote that transmits nothing. |
+
+Discovered devices are named from their own UPnP / ECP description, so the
+list shows what the owner called the TV rather than a generic vendor label.
+Identity comes from the SSDP `USN` or the description's `UDN`, so a DHCP lease
+renewal does not orphan the pairing token or the certificate pin.
 
 ## Architecture
 

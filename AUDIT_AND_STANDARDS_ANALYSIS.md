@@ -77,6 +77,24 @@ If the saved address is stale, reconnect still fails — it just no longer loses
 the pairing along with it. Closing that needs the scanner and the connection
 provider to talk to each other.
 
+### Second follow-up: conformance with what real devices actually do
+
+Reviewing the wire behaviour against the vendor protocols, rather than against
+our own tests, found four more. Each is a case of the app not using
+information the device was already sending it.
+
+| # | Finding | Status |
+|---|---|---|
+| R-1 | **Device names were invented.** Discovery labelled from a hardcoded lookup keyed off the `SERVER` header, so every Samsung was "Samsung TV" and a house with two produced two indistinguishable rows. SSDP's `LOCATION` serves a UPnP description with `<friendlyName>`, `<modelName>` and `<UDN>`; Roku ECP `query/device-info` returns the same, and `RokuController.connect()` was checking the status code and discarding the body. | Fixed |
+| R-2 | **`ST: ssdp:all` only.** Asks every UPnP device on the segment to answer — noisy, slower to filter, rate-limited by some access points. Real remotes ask for what they can control (`roku:ecp`, DIAL, MediaRenderer). `MX: 3` also spread replies over three seconds for no benefit. | Fixed |
+| R-3 | **Listened after probing.** The socket listener was attached only once all three probe rounds had been sent — roughly a second after the first request went out. Found by a test that could not see a device it had just delivered. | Fixed |
+| R-4 | **webOS permissions did not cover the URIs sent.** `CONTROL_INPUT_TEXT` was never requested, and `RemoteKey.ok`/`select` route to `ssap://com.webos.service.ime/sendEnterKey` — so a real LG TV denied the OK button. `CONTROL_INPUT_MEDIA_PLAYBACK` was missing too. Meanwhile `CHECK_3D` (left over from H-1) and `READ_INSTALLED_APPS` were requested and unused. Now derived from a URI→permission map with a test that fails on drift. | Fixed |
+
+**Still unverified, and it needs hardware:** whether modern webOS firmware
+also requires the signed manifest block LG's own app sends. That blob could
+not be reproduced reliably, and a wrong one is worse than none, so it is
+deliberately absent. Pairing against a real LG TV is the check that settles it.
+
 **Two corrections to this audit were made during remediation**, both marked
 in place where the original claim appears — the H-3 caret/reversion detail,
 and the SSDP `substring` bounds claim in §2. Both were found by trying to
