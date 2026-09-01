@@ -10,6 +10,7 @@ import 'package:permission_handler/permission_handler.dart' hide ServiceStatus;
 import '../core/app_logger.dart';
 import '../models/device.dart';
 import '../services/device_description.dart';
+import '../services/device_persistence_service.dart';
 import 'discovery_parsers.dart';
 
 /// Immutable state for the device scanner.
@@ -18,10 +19,20 @@ class ScannerState {
   final List<Device> devices;
   final String? error;
 
+  /// [Device.credentialKey]s of entries restored from storage that this scan
+  /// has not yet heard from.
+  ///
+  /// A device the user has connected to before is shown immediately rather
+  /// than after a multi-second sweep, but until it answers, all we have is a
+  /// memory and an address the router may since have reassigned. The UI needs
+  /// to say which is which.
+  final Set<String> restored;
+
   const ScannerState({
     this.isScanning = false,
     this.devices = const [],
     this.error,
+    this.restored = const {},
   });
 
   /// [clearError] mirrors the convention already used by
@@ -34,10 +45,12 @@ class ScannerState {
     List<Device>? devices,
     String? error,
     bool clearError = false,
+    Set<String>? restored,
   }) => ScannerState(
     isScanning: isScanning ?? this.isScanning,
     devices: devices ?? this.devices,
     error: clearError ? null : (error ?? this.error),
+    restored: restored ?? this.restored,
   );
 }
 
@@ -61,6 +74,14 @@ final mdnsEnabledProvider = Provider<bool>(
 /// Reads a discovered device's self-description. Overridden in tests.
 final deviceDescriptionFetcherProvider = Provider<DeviceDescriptionFetcher>(
   (_) => fetchDeviceDescription,
+);
+
+/// Reads the devices the user has connected to before. Overridden in tests so
+/// the scanner never touches the keychain.
+typedef KnownDevicesLoader = Future<List<Device>> Function();
+
+final knownDevicesLoaderProvider = Provider<KnownDevicesLoader>(
+  (ref) => ref.watch(devicePersistenceProvider).loadKnownDevices,
 );
 
 /// Riverpod [Notifier] that manages mDNS / NSD and SSDP device discovery.
@@ -98,9 +119,18 @@ class ScannerNotifier extends Notifier<ScannerState> {
   StreamSubscription<RawSocketEvent>? _ssdpSub;
   bool _disposed = false;
 
+  /// Which scan the SSDP probe belongs to.
+  ///
+  /// Binding a UDP socket is asynchronous, so a stopScan or a rescan can land
+  /// between the request and the socket arriving. Without this the probe went
+  /// on to adopt a socket for a scan that no longer existed, and nothing was
+  /// left holding a reference to close it.
+  int _scanGeneration = 0;
+
   late final DatagramSocketBinder _bindSocket;
   late final bool _mdnsEnabled;
   late final DeviceDescriptionFetcher _fetchDescription;
+  late final KnownDevicesLoader _loadKnownDevices;
 
   /// Description URLs already requested. Devices answer every search target,
   /// so without this a single TV would be fetched four times per round.
@@ -111,6 +141,7 @@ class ScannerNotifier extends Notifier<ScannerState> {
     _bindSocket = ref.read(ssdpSocketBinderProvider);
     _mdnsEnabled = ref.read(mdnsEnabledProvider);
     _fetchDescription = ref.read(deviceDescriptionFetcherProvider);
+    _loadKnownDevices = ref.read(knownDevicesLoaderProvider);
 
     ref.onDispose(() {
       _disposed = true;
@@ -144,6 +175,7 @@ class ScannerNotifier extends Notifier<ScannerState> {
   /// Start scanning for devices on the local network.
   Future<void> startScan() async {
     if (_disposed) return;
+    _scanGeneration++;
 
     if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
       try {
@@ -158,7 +190,14 @@ class ScannerNotifier extends Notifier<ScannerState> {
     if (_disposed) return;
 
     _describing.clear();
-    state = state.copyWith(isScanning: true, devices: [], clearError: true);
+    state = state.copyWith(
+      isScanning: true,
+      devices: [],
+      restored: {},
+      clearError: true,
+    );
+    await _seedFromMemory();
+    if (_disposed) return;
 
     const serviceTypes = [
       '_roku._tcp',
@@ -194,7 +233,7 @@ class ScannerNotifier extends Notifier<ScannerState> {
         }
       }
 
-      unawaited(_startSsdpDiscovery());
+      unawaited(_startSsdpDiscovery(_scanGeneration));
 
       _scanDeadline?.cancel();
       _scanDeadline = Timer(_scanWindow, () {
@@ -210,6 +249,7 @@ class ScannerNotifier extends Notifier<ScannerState> {
 
   /// Stop all active discoveries and release resources.
   Future<void> stopScan({bool isDisposing = false}) async {
+    _scanGeneration++;
     _releaseResources();
 
     final activeDiscoveries = List<Discovery>.from(_discoveries);
@@ -242,22 +282,60 @@ class ScannerNotifier extends Notifier<ScannerState> {
     _addDevice(device, via: 'mDNS');
   }
 
+  /// Shows devices the user has connected to before, before the network has
+  /// had a chance to answer.
+  ///
+  /// A sweep takes seconds; a remote that opens on an empty list every time
+  /// is one that has forgotten the television it was talking to a minute ago.
+  /// A live sighting merges over the remembered entry and updates its address,
+  /// so a device that moved is corrected rather than duplicated.
+  Future<void> _seedFromMemory() async {
+    final List<Device> known;
+    try {
+      known = await _loadKnownDevices();
+    } catch (e, s) {
+      // Memory is a convenience; losing it must not stop a scan.
+      log.e('ScannerNotifier: could not read remembered devices', e, s);
+      return;
+    }
+    if (_disposed || known.isEmpty || state.devices.isNotEmpty) return;
+
+    state = state.copyWith(
+      devices: known,
+      restored: {for (final d in known) d.credentialKey},
+    );
+  }
+
   /// Merges a discovered device into state, keyed by host.
   void _addDevice(Device device, {required String via}) {
     if (_disposed) return;
+
+    // A sighting confirms whichever entry it matches, so the same rule that
+    // decides the merge decides whether a remembered device has answered.
+    final matched = indexOfDevice(state.devices, device);
+    final confirmed = matched < 0 ? null : state.devices[matched].credentialKey;
+
     final merged = mergeDiscovered(state.devices, device);
-    if (identical(merged, state.devices)) return;
-    state = state.copyWith(devices: merged);
+    if (identical(merged, state.devices) &&
+        !(confirmed != null && state.restored.contains(confirmed))) {
+      return;
+    }
+    state = state.copyWith(
+      devices: merged,
+      restored: confirmed == null || !state.restored.contains(confirmed)
+          ? null
+          : ({...state.restored}..remove(confirmed)),
+    );
     log.d(
       'ScannerNotifier: found "${device.name}" at ${device.ip}:'
       '${device.port} (${device.type.name}) via $via',
     );
   }
 
-  Future<void> _startSsdpDiscovery() async {
+  Future<void> _startSsdpDiscovery(int generation) async {
     try {
       final socket = await _bindSocket();
-      if (_disposed) {
+      if (_disposed || generation != _scanGeneration) {
         socket.close();
         return;
       }
@@ -292,7 +370,11 @@ class ScannerNotifier extends Notifier<ScannerState> {
       // dropped on Wi-Fi and UDP offers no retransmission of its own.
       for (var round = 0; round < _ssdpProbeCount; round++) {
         for (final target in _searchTargets) {
-          if (_disposed || _ssdpSocket == null) return;
+          if (_disposed ||
+              _ssdpSocket == null ||
+              generation != _scanGeneration) {
+            return;
+          }
           socket.send(
             utf8.encode(_mSearch(target)),
             multicastAddress,

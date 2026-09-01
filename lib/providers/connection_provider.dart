@@ -175,6 +175,9 @@ class ConnectionNotifier extends Notifier<DeviceConnectionState> {
         _controller = controller;
         await controller.connect();
         await _persistence.saveDevice(device);
+        // Remembered only once it has actually answered: a device that never
+        // connected is a typo, not something to offer on the next scan.
+        await _persistence.rememberDevice(device);
 
         if (_isSuperseded(epoch)) return;
         _watchHealth(controller, device);

@@ -16,16 +16,19 @@ void main() {
 
   /// A container whose network is entirely under the test's control: mDNS off,
   /// UDP socket faked, descriptions stubbed. Nothing touches the real network.
-  ProviderContainer makeContainer({DeviceDescription? describesAs}) =>
-      ProviderContainer(
-        overrides: [
-          mdnsEnabledProvider.overrideWithValue(false),
-          ssdpSocketBinderProvider.overrideWithValue(() async => socket),
-          deviceDescriptionFetcherProvider.overrideWithValue(
-            (_) async => describesAs,
-          ),
-        ],
-      );
+  ProviderContainer makeContainer({
+    DeviceDescription? describesAs,
+    List<Device> knownDevices = const [],
+  }) => ProviderContainer(
+    overrides: [
+      mdnsEnabledProvider.overrideWithValue(false),
+      ssdpSocketBinderProvider.overrideWithValue(() async => socket),
+      deviceDescriptionFetcherProvider.overrideWithValue(
+        (_) async => describesAs,
+      ),
+      knownDevicesLoaderProvider.overrideWithValue(() async => knownDevices),
+    ],
+  );
 
   /// An SSDP reply as a Roku sends one, pointing at its description.
   /// An SSDP reply as a Roku sends one, pointing at its description.
@@ -154,6 +157,7 @@ void main() {
               fetches++;
               return const DeviceDescription(friendlyName: 'Living Room');
             }),
+            knownDevicesLoaderProvider.overrideWithValue(() async => const []),
           ],
         );
         addTearDown(container.dispose);
@@ -246,6 +250,78 @@ void main() {
       await notifier.startScan();
 
       expect(first.closed, isTrue, reason: 'the first socket must be released');
+    });
+  });
+
+  group('ScannerNotifier remembered devices', () {
+    const saved = Device(
+      id: 'ssdp:roku:ecp:1GU48T017973',
+      name: 'Living Room',
+      type: DeviceType.roku,
+      model: 'Roku Ultra',
+      ip: '192.168.1.50',
+      port: 8060,
+      uid: 'ssdp:roku:ecp:1GU48T017973',
+    );
+
+    test('shows them before the network has answered anything', () async {
+      final container = makeContainer(knownDevices: [saved]);
+      addTearDown(container.dispose);
+
+      await container.read(scannerProvider.notifier).startScan();
+
+      // A discovery sweep takes seconds. A device the user has already
+      // connected to should not make them watch an empty list first.
+      final state = container.read(scannerProvider);
+      expect(state.devices.single.name, 'Living Room');
+      expect(state.restored, contains(saved.credentialKey));
+    });
+
+    test('a live sighting takes over the remembered entry', () async {
+      final container = makeContainer(knownDevices: [saved]);
+      addTearDown(container.dispose);
+
+      await container.read(scannerProvider.notifier).startScan();
+      // Same television, new address after a DHCP lease renewal.
+      socket.deliver(ssdpReply('192.168.1.77'));
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      final state = container.read(scannerProvider);
+      expect(
+        state.devices,
+        hasLength(1),
+        reason: 'one television must not appear once per address it has held',
+      );
+      expect(state.devices.single.ip, '192.168.1.77');
+      expect(
+        state.restored,
+        isEmpty,
+        reason: 'it has answered, so it is no longer only a memory',
+      );
+    });
+
+    test('a remembered device is kept alongside a new one', () async {
+      final container = makeContainer(knownDevices: [saved]);
+      addTearDown(container.dispose);
+
+      await container.read(scannerProvider.notifier).startScan();
+      socket.deliver(
+        Datagram(
+          utf8.encode(
+            'HTTP/1.1 200 OK\r\n'
+            'SERVER: WebOS UPnP/1.0\r\n'
+            'LOCATION: http://192.168.1.90:3000/\r\n'
+            'USN: uuid:lg-9999\r\n\r\n',
+          ),
+          InternetAddress('192.168.1.90'),
+          1900,
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      final state = container.read(scannerProvider);
+      expect(state.devices.map((d) => d.ip), ['192.168.1.50', '192.168.1.90']);
+      expect(state.restored, {saved.credentialKey});
     });
   });
 }

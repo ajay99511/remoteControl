@@ -69,6 +69,17 @@ void main() {
       verify(mockPersistence.saveDevice(testDevice)).called(1);
     });
 
+    test('remembers the device so the next scan can show it at once', () async {
+      final container = containerWith(FakeController());
+      addTearDown(container.dispose);
+
+      await container.read(connectionProvider.notifier).connect(testDevice);
+
+      // Only devices that actually connected are worth remembering; a failed
+      // attempt against a mistyped address is not a device the user owns.
+      verify(mockPersistence.rememberDevice(testDevice)).called(1);
+    });
+
     test('retries a transient failure and gives up after 4 attempts', () {
       fakeAsync((async) {
         final fake = FakeController(

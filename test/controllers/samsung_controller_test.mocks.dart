@@ -75,6 +75,32 @@ class MockDevicePersistenceService extends _i1.Mock
           as _i5.Future<void>);
 
   @override
+  _i5.Future<void> rememberDevice(_i6.Device? device) =>
+      (super.noSuchMethod(
+            Invocation.method(#rememberDevice, [device]),
+            returnValue: _i5.Future<void>.value(),
+            returnValueForMissingStub: _i5.Future<void>.value(),
+          )
+          as _i5.Future<void>);
+
+  @override
+  _i5.Future<List<_i6.Device>> loadKnownDevices() =>
+      (super.noSuchMethod(
+            Invocation.method(#loadKnownDevices, []),
+            returnValue: _i5.Future<List<_i6.Device>>.value(<_i6.Device>[]),
+          )
+          as _i5.Future<List<_i6.Device>>);
+
+  @override
+  _i5.Future<void> forgetDevice(_i6.Device? device) =>
+      (super.noSuchMethod(
+            Invocation.method(#forgetDevice, [device]),
+            returnValue: _i5.Future<void>.value(),
+            returnValueForMissingStub: _i5.Future<void>.value(),
+          )
+          as _i5.Future<void>);
+
+  @override
   _i5.Future<void> saveCertFingerprint(String? host, String? sha256Hex) =>
       (super.noSuchMethod(
             Invocation.method(#saveCertFingerprint, [host, sha256Hex]),

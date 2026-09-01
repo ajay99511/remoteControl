@@ -165,6 +165,22 @@ Device? parseMdnsService({
   );
 }
 
+/// Where [candidate] already sits in [known], or -1.
+///
+/// The one place this rule is written down. The scanner needs the same answer
+/// [mergeDiscovered] uses - to tell whether a live sighting has confirmed a
+/// device restored from storage - and two copies of the rule would drift.
+///
+/// Matches on the stable id when both sides have one, so the same television
+/// answering on a new address is recognised rather than listed twice.
+int indexOfDevice(List<Device> known, Device candidate) {
+  if (candidate.uid != null) {
+    final byUid = known.indexWhere((d) => d.uid == candidate.uid);
+    if (byUid >= 0) return byUid;
+  }
+  return known.indexWhere((d) => d.ip == candidate.ip);
+}
+
 /// Merges [candidate] into [known], keyed by host.
 ///
 /// Deduping on (ip, port) let one television appear two or three times: mDNS
@@ -176,12 +192,7 @@ Device? parseMdnsService({
 /// A later announcement only fills gaps; it never overwrites a more specific
 /// answer that arrived first.
 List<Device> mergeDiscovered(List<Device> known, Device candidate) {
-  // Match on the stable id when both sides have one, so the same television
-  // answering on a new address is recognised rather than listed twice.
-  var index = candidate.uid == null
-      ? -1
-      : known.indexWhere((d) => d.uid == candidate.uid);
-  if (index < 0) index = known.indexWhere((d) => d.ip == candidate.ip);
+  final index = indexOfDevice(known, candidate);
   if (index < 0) return [...known, candidate];
 
   final existing = known[index];

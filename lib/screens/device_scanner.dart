@@ -117,7 +117,11 @@ class _DeviceScannerScreenState extends ConsumerState<DeviceScannerScreen> {
                   Expanded(
                     child: scanner.isScanning && scanner.devices.isEmpty
                         ? _buildScanningAnimation()
-                        : _buildDeviceList(scanner.devices, scanner.isScanning),
+                        : _buildDeviceList(
+                            scanner.devices,
+                            scanner.isScanning,
+                            scanner.restored,
+                          ),
                   ),
                   if (connection.status == ConnectionStatus.connecting)
                     Container(
@@ -271,7 +275,11 @@ class _DeviceScannerScreenState extends ConsumerState<DeviceScannerScreen> {
     );
   }
 
-  Widget _buildDeviceList(List<Device> devices, bool isScanning) {
+  Widget _buildDeviceList(
+    List<Device> devices,
+    bool isScanning,
+    Set<String> restored,
+  ) {
     return Column(
       children: [
         Expanded(
@@ -316,13 +324,19 @@ class _DeviceScannerScreenState extends ConsumerState<DeviceScannerScreen> {
                     // meant the 20th device faded in two seconds late, and
                     // the animation restarted on every scroll recycle.
                     return RepaintBoundary(
-                      child: _buildDeviceItem(device)
-                          .animate()
-                          .fadeIn(
-                            duration: 400.ms,
-                            delay: (math.min(index, 6) * 60).ms,
-                          )
-                          .slideX(begin: 0.1, end: 0),
+                      child:
+                          _buildDeviceItem(
+                                device,
+                                isRemembered: restored.contains(
+                                  device.credentialKey,
+                                ),
+                              )
+                              .animate()
+                              .fadeIn(
+                                duration: 400.ms,
+                                delay: (math.min(index, 6) * 60).ms,
+                              )
+                              .slideX(begin: 0.1, end: 0),
                     );
                   },
                 ),
@@ -386,7 +400,7 @@ class _DeviceScannerScreenState extends ConsumerState<DeviceScannerScreen> {
     );
   }
 
-  Widget _buildDeviceItem(Device device) {
+  Widget _buildDeviceItem(Device device, {required bool isRemembered}) {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
@@ -402,7 +416,9 @@ class _DeviceScannerScreenState extends ConsumerState<DeviceScannerScreen> {
         ],
       ),
       child: Semantics(
-        label: '${device.name}, ${device.type.name} device, ${device.model}',
+        label:
+            '${device.name}, ${device.type.name} device, ${device.model}'
+            '${isRemembered ? ', saved, not seen on this network yet' : ''}',
         hint: 'Connect to this device',
         button: true,
         child: Material(
@@ -446,12 +462,26 @@ class _DeviceScannerScreenState extends ConsumerState<DeviceScannerScreen> {
                           ),
                         ),
                         const SizedBox(height: 4),
-                        Text(
-                          device.model,
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.6),
-                            fontSize: 13,
-                          ),
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                device.model,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.6),
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ),
+                            // A remembered device is shown before the network
+                            // has confirmed it, so the row has to be honest
+                            // about which of the two it is.
+                            if (isRemembered) ...[
+                              const SizedBox(width: 8),
+                              const _SavedBadge(),
+                            ],
+                          ],
                         ),
                       ],
                     ),
@@ -561,4 +591,28 @@ class _DeviceScannerScreenState extends ConsumerState<DeviceScannerScreen> {
       ),
     );
   }
+}
+
+/// Marks a row restored from storage that this scan has not yet heard from.
+class _SavedBadge extends StatelessWidget {
+  const _SavedBadge();
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+    decoration: BoxDecoration(
+      color: Colors.white.withValues(alpha: 0.08),
+      borderRadius: BorderRadius.circular(8),
+      border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+    ),
+    child: Text(
+      'Saved',
+      style: TextStyle(
+        color: Colors.white.withValues(alpha: 0.55),
+        fontSize: 11,
+        fontWeight: FontWeight.w600,
+        letterSpacing: 0.5,
+      ),
+    ),
+  );
 }
