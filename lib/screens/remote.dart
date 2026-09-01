@@ -1,14 +1,19 @@
+import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:lucide_icons/lucide_icons.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
+
+import '../theme/app_colors.dart';
 
 import '../models/app_id.dart';
+import '../models/command_result.dart';
 import '../models/device.dart';
 import '../models/remote_key.dart';
 import '../providers/connection_provider.dart';
+import '../widgets/ambient_background.dart';
 import '../widgets/remote_buttons.dart';
 
 class RemoteScreen extends ConsumerStatefulWidget {
@@ -46,7 +51,7 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen>
       setState(() {
         activeTab = _tabController.index;
       });
-      HapticFeedback.selectionClick();
+      unawaited(HapticFeedback.selectionClick());
     });
   }
 
@@ -58,15 +63,59 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen>
     super.dispose();
   }
 
-  void _sendKey(RemoteKey key) {
-    ref.read(connectionProvider.notifier).sendKey(key);
-    HapticFeedback.lightImpact();
+  /// Reports the outcome of one command.
+  ///
+  /// The haptic is deliberately here and not in the button widgets: those
+  /// buzzed on tap regardless of what happened, so the app gave positive
+  /// tactile confirmation of commands that were never transmitted.
+  void _report(CommandResult result, String label) {
+    if (!mounted) return;
+    switch (result) {
+      case CommandSent():
+        unawaited(HapticFeedback.lightImpact());
+      case CommandUnsupported(:final what):
+        _showMessage('$what is not available on this TV');
+      case CommandNotConnected():
+        _showMessage('Not connected to ${widget.device.name}');
+      case CommandFailed():
+        unawaited(HapticFeedback.heavyImpact());
+        _showMessage('$label failed to reach the TV');
+    }
   }
 
-  void _sendPower() {
-    // Fire-and-forget, no local state tracking (Requirement 2.25)
-    _sendKey(RemoteKey.power);
-    HapticFeedback.mediumImpact();
+  void _showMessage(String message, {VoidCallback? onRetry}) {
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(message),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: AppColors.surfaceRaised,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        duration: const Duration(seconds: 3),
+        action: onRetry == null
+            ? null
+            : SnackBarAction(
+                label: 'Retry',
+                textColor: Colors.indigoAccent,
+                onPressed: onRetry,
+              ),
+      ),
+    );
+  }
+
+  Future<void> _sendKey(RemoteKey key) async {
+    final result = await ref.read(connectionProvider.notifier).sendKey(key);
+    _report(result, key.name);
+  }
+
+  Future<void> _sendPower() async {
+    final result = await ref
+        .read(connectionProvider.notifier)
+        .sendKey(RemoteKey.power);
+    if (result.isSuccess) unawaited(HapticFeedback.mediumImpact());
+    _report(result, 'Power');
   }
 
   void _toggleKeyboard() {
@@ -80,20 +129,34 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen>
     }
   }
 
-  void _sendText(String text) {
+  Future<void> _sendText(String text) async {
     if (text.isEmpty) return;
-    ref.read(connectionProvider.notifier).sendText(text);
-    HapticFeedback.lightImpact();
-    _keyboardController.clear();
-    setState(() {
-      showKeyboard = false;
-    });
-    _keyboardFocus.unfocus();
+    final result = await ref.read(connectionProvider.notifier).sendText(text);
+    if (!mounted) return;
+    _report(result, 'Text entry');
+
+    // Only clear the field and dismiss once the text actually landed;
+    // discarding input the TV never received loses the user's typing.
+    if (result.isSuccess) {
+      _keyboardController.clear();
+      setState(() => showKeyboard = false);
+      _keyboardFocus.unfocus();
+    }
   }
 
-  void _launchApp(AppId appId) {
-    ref.read(connectionProvider.notifier).launchApp(appId);
-    HapticFeedback.mediumImpact();
+  /// Sends a channel digit as a key press, not as text.
+  Future<void> _sendDigit(String digit) async {
+    final value = int.tryParse(digit);
+    if (value == null) return;
+    final result = await ref
+        .read(connectionProvider.notifier)
+        .sendKey(kDigitKeys[value]);
+    _report(result, 'Number $digit');
+  }
+
+  Future<void> _launchApp(AppId appId) async {
+    final result = await ref.read(connectionProvider.notifier).launchApp(appId);
+    _report(result, appId.displayName);
   }
 
   @override
@@ -101,39 +164,27 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen>
     final connection = ref.watch(connectionProvider);
     final isConnected = connection.status == ConnectionStatus.connected;
 
+    // The screen where every user action happens previously had no error
+    // state at all: it rendered identically whether commands worked or not.
+    ref.listen(connectionProvider, (previous, next) {
+      if (next.status != ConnectionStatus.error) return;
+      if (previous?.errorMessage == next.errorMessage) return;
+      _showMessage(
+        next.errorMessage ?? 'Lost connection to ${widget.device.name}',
+        onRetry: () =>
+            ref.read(connectionProvider.notifier).connect(widget.device),
+      );
+    });
+
     return Scaffold(
-      backgroundColor: const Color(0xFF09090B),
+      backgroundColor: AppColors.background,
       body: Stack(
         children: [
-          // Background Glow Orbs for depth
-          Positioned(
-            top: -100,
-            right: -100,
-            child: Container(
-              width: 300,
-              height: 300,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.indigoAccent.withValues(alpha: 0.1),
-              ),
-            ),
-          ),
-          Positioned(
-            bottom: -50,
-            left: -50,
-            child: Container(
-              width: 200,
-              height: 200,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.deepPurpleAccent.withValues(alpha: 0.1),
-              ),
-            ),
-          ),
-          // BackdropFilter sigma reduced to 15 (Requirement 2.30)
-          BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-            child: Container(color: Colors.transparent),
+          const AmbientBackground(
+            secondary: Colors.deepPurpleAccent,
+            primaryAlignment: Alignment(0.9, -1.0),
+            secondaryAlignment: Alignment(-1.0, 1.0),
+            intensity: 0.12,
           ),
           // Content
           SafeArea(
@@ -202,14 +253,14 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen>
                         height: 8,
                         decoration: BoxDecoration(
                           color: isConnected
-                              ? const Color(0xFF69F0AE)
+                              ? AppColors.connected
                               : Colors.redAccent,
                           shape: BoxShape.circle,
                           boxShadow: [
                             BoxShadow(
                               color:
                                   (isConnected
-                                          ? const Color(0xFF69F0AE)
+                                          ? AppColors.connected
                                           : Colors.redAccent)
                                       .withValues(alpha: 0.5),
                               blurRadius: 8,
@@ -229,7 +280,7 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen>
                     isConnected ? 'CONNECTED' : 'DISCONNECTED',
                     style: TextStyle(
                       color: isConnected
-                          ? const Color(0xFF69F0AE)
+                          ? AppColors.connected
                           : Colors.redAccent,
                       fontSize: 10,
                       fontWeight: FontWeight.w800,
@@ -248,10 +299,7 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen>
             ),
             child: IconButton(
               tooltip: 'Power Off',
-              icon: const Icon(
-                LucideIcons.power,
-                color: Colors.redAccent,
-              ),
+              icon: const Icon(LucideIcons.power, color: Colors.redAccent),
               onPressed: _sendPower,
             ),
           ),
@@ -388,8 +436,8 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen>
                                     begin: Alignment.topLeft,
                                     end: Alignment.bottomRight,
                                     colors: [
-                                      Color(0xFF27272A),
-                                      Color(0xFF18181B),
+                                      AppColors.surfaceRaised,
+                                      AppColors.surface,
                                     ],
                                   ),
                                   border: Border.all(
@@ -398,7 +446,9 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen>
                                   ),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: Colors.black.withValues(alpha: 0.5),
+                                      color: Colors.black.withValues(
+                                        alpha: 0.5,
+                                      ),
                                       blurRadius: 10,
                                       offset: const Offset(0, 5),
                                     ),
@@ -506,7 +556,12 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen>
     );
   }
 
-  Widget _buildDPadSegment(RemoteKey key, IconData icon, EdgeInsets padding, String label) {
+  Widget _buildDPadSegment(
+    RemoteKey key,
+    IconData icon,
+    EdgeInsets padding,
+    String label,
+  ) {
     return Semantics(
       label: label,
       button: true,
@@ -556,18 +611,27 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen>
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     Icon(
-                                      _pendingDirection == RemoteKey.up ? LucideIcons.chevronUp :
-                                      _pendingDirection == RemoteKey.down ? LucideIcons.chevronDown :
-                                      _pendingDirection == RemoteKey.left ? LucideIcons.chevronLeft :
-                                      _pendingDirection == RemoteKey.right ? LucideIcons.chevronRight :
-                                      LucideIcons.mousePointer2,
+                                      _pendingDirection == RemoteKey.up
+                                          ? LucideIcons.chevronUp
+                                          : _pendingDirection == RemoteKey.down
+                                          ? LucideIcons.chevronDown
+                                          : _pendingDirection == RemoteKey.left
+                                          ? LucideIcons.chevronLeft
+                                          : _pendingDirection == RemoteKey.right
+                                          ? LucideIcons.chevronRight
+                                          : LucideIcons.mousePointer2,
                                       size: 80,
-                                      color: _pendingDirection != null ? Colors.indigoAccent : Colors.white.withValues(alpha: 0.1),
+                                      color: _pendingDirection != null
+                                          ? Colors.indigoAccent
+                                          : Colors.white.withValues(alpha: 0.1),
                                     ),
                                     if (_pendingDirection != null)
                                       Text(
                                         _pendingDirection!.name.toUpperCase(),
-                                        style: const TextStyle(color: Colors.indigoAccent, fontWeight: FontWeight.bold),
+                                        style: const TextStyle(
+                                          color: Colors.indigoAccent,
+                                          fontWeight: FontWeight.bold,
+                                        ),
                                       ).animate().fadeIn(),
                                   ],
                                 ),
@@ -601,9 +665,13 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen>
                                 final dy = _touchpadDelta.dy.abs();
                                 if (dx > 30 || dy > 30) {
                                   if (dx > dy) {
-                                    _pendingDirection = _touchpadDelta.dx > 0 ? RemoteKey.right : RemoteKey.left;
+                                    _pendingDirection = _touchpadDelta.dx > 0
+                                        ? RemoteKey.right
+                                        : RemoteKey.left;
                                   } else {
-                                    _pendingDirection = _touchpadDelta.dy > 0 ? RemoteKey.down : RemoteKey.up;
+                                    _pendingDirection = _touchpadDelta.dy > 0
+                                        ? RemoteKey.down
+                                        : RemoteKey.up;
                                   }
                                 }
                               });
@@ -684,16 +752,13 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen>
               final num = nums[index];
               if (num.isEmpty) return const SizedBox();
               return Semantics(
-                label: 'Number $num',
-                button: true,
-                child: Material(
+                    label: 'Number $num',
+                    button: true,
+                    child: Material(
                       color: Colors.white.withValues(alpha: 0.03),
                       borderRadius: BorderRadius.circular(20),
                       child: InkWell(
-                        onTap: () {
-                          ref.read(connectionProvider.notifier).sendText(num);
-                          HapticFeedback.lightImpact();
-                        },
+                        onTap: () => _sendDigit(num),
                         borderRadius: BorderRadius.circular(20),
                         splashColor: Colors.indigoAccent.withValues(alpha: 0.2),
                         child: Container(
@@ -722,7 +787,7 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen>
                         ),
                       ),
                     ),
-              )
+                  )
                   .animate()
                   .fadeIn(delay: (index * 20).ms, duration: 300.ms)
                   .slideY(begin: 0.1, end: 0);
@@ -780,7 +845,7 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen>
               child: Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF18181B).withValues(alpha: 0.8),
+                  color: AppColors.surface.withValues(alpha: 0.8),
                   borderRadius: BorderRadius.circular(24),
                   border: Border.all(
                     color: Colors.white.withValues(alpha: 0.1),

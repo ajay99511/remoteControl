@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
+import '../theme/app_colors.dart';
+
+/// Presentational only. Haptics deliberately live at the call site, which is
+/// the only place that knows whether the command actually reached the TV.
 class RemoteButton extends StatelessWidget {
   final IconData? icon;
   final String? label;
@@ -36,10 +39,7 @@ class RemoteButton extends StatelessWidget {
             Material(
               color: Colors.transparent,
               child: InkWell(
-                onTap: () {
-                  HapticFeedback.lightImpact();
-                  onTap();
-                },
+                onTap: onTap,
                 borderRadius: BorderRadius.circular(size / 2),
                 splashColor: (activeColor ?? Colors.indigoAccent).withValues(
                   alpha: 0.2,
@@ -51,7 +51,7 @@ class RemoteButton extends StatelessWidget {
                   height: size,
                   decoration: BoxDecoration(
                     color: active
-                        ? (activeColor ?? const Color(0xFF27272A))
+                        ? (activeColor ?? AppColors.surfaceRaised)
                         : Colors.white.withValues(alpha: 0.03),
                     shape: BoxShape.circle,
                     border: Border.all(
@@ -93,7 +93,7 @@ class RemoteButton extends StatelessWidget {
               Text(
                 label!,
                 style: const TextStyle(
-                  color: Color(0xFF71717A), // zinc-500
+                  color: AppColors.textMuted, // zinc-500
                   fontSize: 10,
                   fontWeight: FontWeight.w600,
                   letterSpacing: 1.0,
@@ -153,10 +153,7 @@ class RockerButton extends StatelessWidget {
               label: '$label up',
               button: true,
               child: InkWell(
-                onTap: () {
-                  HapticFeedback.lightImpact();
-                  onUp();
-                },
+                onTap: onUp,
                 borderRadius: const BorderRadius.vertical(
                   top: Radius.circular(32),
                 ),
@@ -170,7 +167,7 @@ class RockerButton extends StatelessWidget {
           Text(
             label,
             style: const TextStyle(
-              color: Color(0xFF71717A),
+              color: AppColors.textMuted,
               fontSize: 12,
               fontWeight: FontWeight.bold,
               letterSpacing: 1.5,
@@ -181,10 +178,7 @@ class RockerButton extends StatelessWidget {
               label: '$label down',
               button: true,
               child: InkWell(
-                onTap: () {
-                  HapticFeedback.lightImpact();
-                  onDown();
-                },
+                onTap: onDown,
                 borderRadius: const BorderRadius.vertical(
                   bottom: Radius.circular(32),
                 ),
@@ -222,10 +216,7 @@ class AppButton extends StatelessWidget {
         color: Colors.white.withValues(alpha: 0.03),
         borderRadius: BorderRadius.circular(16),
         child: InkWell(
-          onTap: () {
-            HapticFeedback.mediumImpact();
-            onTap();
-          },
+          onTap: onTap,
           borderRadius: BorderRadius.circular(16),
           splashColor: color.withValues(alpha: 0.2),
           highlightColor: color.withValues(alpha: 0.05),

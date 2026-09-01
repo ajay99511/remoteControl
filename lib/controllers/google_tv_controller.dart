@@ -1,29 +1,34 @@
 import '../exceptions/unsupported_device_exception.dart';
 import '../models/app_id.dart';
+import '../models/command_result.dart';
 import '../models/device.dart';
 import '../models/remote_key.dart';
+import 'controller_health.dart';
 import 'device_controller.dart';
 
 /// Google TV / Android TV stub — returns UnsupportedDeviceException (Requirement 2.7).
-class GoogleTvController implements DeviceController {
+class GoogleTvController with HealthReporting implements DeviceController {
   @override
   Future<void> connect() async =>
-      throw UnsupportedDeviceException(DeviceType.googleTv);
+      throw const UnsupportedDeviceException(DeviceType.googleTv);
 
   @override
   Future<void> disconnect() async {}
 
   @override
-  Future<void> sendKey(RemoteKey key) async =>
-      throw UnsupportedDeviceException(DeviceType.googleTv);
+  Set<RemoteKey> get supportedKeys => const {};
 
   @override
-  Future<void> sendText(String text) async =>
-      throw UnsupportedDeviceException(DeviceType.googleTv);
+  Future<CommandResult> sendKey(RemoteKey key) async =>
+      CommandUnsupported(key.name);
 
   @override
-  Future<void> launchApp(AppId appId) async =>
-      throw UnsupportedDeviceException(DeviceType.googleTv);
+  Future<CommandResult> sendText(String text) async =>
+      const CommandUnsupported('text entry');
+
+  @override
+  Future<CommandResult> launchApp(AppId appId) async =>
+      CommandUnsupported(appId.displayName);
 
   @override
   bool get isConnected => false;

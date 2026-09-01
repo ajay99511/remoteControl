@@ -14,10 +14,36 @@ class DevicePersistenceService {
   static const _lgClientKeyPrefix = 'lg_client_key_';
   static const _vizioTokenPrefix = 'vizio_token_';
 
+  /// Keychain accessibility is set explicitly rather than left to the
+  /// plugin's default.
+  ///
+  /// Everything in this store is a *device-local* secret: a pairing token, an
+  /// LG client key, a TOFU certificate pin. The default accessibility is
+  /// included in encrypted backups, so all three would restore onto a
+  /// different handset - and a certificate pin that migrates is a pin
+  /// vouching for a TV the new device has never met. The `_this_device`
+  /// variant excludes them from backup while still allowing reads after a
+  /// reboot, which auto-reconnect needs.
+  ///
+  /// Android needs no equivalent: flutter_secure_storage 10 encrypts with its
+  /// own ciphers by default (the old encryptedSharedPreferences flag is
+  /// deprecated and ignored).
+  static const _iosOptions = IOSOptions(
+    accessibility: KeychainAccessibility.first_unlock_this_device,
+  );
+  static const _macOsOptions = MacOsOptions(
+    accessibility: KeychainAccessibility.first_unlock_this_device,
+  );
+
   final FlutterSecureStorage _storage;
 
   DevicePersistenceService({FlutterSecureStorage? storage})
-      : _storage = storage ?? const FlutterSecureStorage();
+    : _storage =
+          storage ??
+          const FlutterSecureStorage(
+            iOptions: _iosOptions,
+            mOptions: _macOsOptions,
+          );
 
   // ── Device persistence ──────────────────────────────────────────────────
 

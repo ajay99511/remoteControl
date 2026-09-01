@@ -6,11 +6,7 @@ import 'package:devicecontroller/main.dart';
 void main() {
   testWidgets('App smoke test - Scanner screen', (WidgetTester tester) async {
     // Build our app and trigger a frame.
-    await tester.pumpWidget(
-      const ProviderScope(
-        child: MyApp(),
-      ),
-    );
+    await tester.pumpWidget(const ProviderScope(child: MyApp()));
 
     // Verify Discover title
     expect(find.text('Discover'), findsOneWidget);
@@ -22,7 +18,9 @@ void main() {
     // Tap Manual IP
     await tester.tap(find.text('Manual IP'));
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 500)); // Wait for dialog animation
+    await tester.pump(
+      const Duration(milliseconds: 500),
+    ); // Wait for dialog animation
 
     // Verify dialog
     expect(find.text('Connect via IP'), findsOneWidget);

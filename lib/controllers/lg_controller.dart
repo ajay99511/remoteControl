@@ -5,12 +5,14 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../core/app_logger.dart';
 import '../models/app_id.dart';
+import '../models/command_result.dart';
 import '../models/remote_key.dart';
 import '../services/device_persistence_service.dart';
+import 'controller_health.dart';
 import 'device_controller.dart';
 
 /// LG webOS TV controller via SSAP WebSocket on port 3000 (Requirement 2.4).
-class LgController implements DeviceController {
+class LgController with HealthReporting implements DeviceController {
   final String host;
   final int port;
   final DevicePersistenceService _persistence;
@@ -21,18 +23,32 @@ class LgController implements DeviceController {
   Timer? _pongTimeoutTimer;
   String? _clientKey;
 
+  /// Seam for tests, mirroring [SamsungController]. Production passes null and
+  /// the real socket is opened by [WebSocketChannel.connect].
+  final WebSocketChannel Function(Uri)? _channelFactory;
+
+  /// Where this device's secrets are filed. Defaults to [host] so existing
+  /// call sites behave as before, but the factory passes Device.credentialKey
+  /// so a pairing token survives the router handing the TV a new address.
+  final String _credentialKey;
+
   LgController({
     required this.host,
     this.port = 3000,
     required DevicePersistenceService persistence,
-  }) : _persistence = persistence;
+    WebSocketChannel Function(Uri)? channelFactory,
+    String? credentialKey,
+  }) : _persistence = persistence,
+       _channelFactory = channelFactory,
+       _credentialKey = credentialKey ?? host;
 
   @override
   Future<void> connect() async {
     try {
-      _clientKey = await _persistence.loadLgClientKey(host);
+      _clientKey = await _persistence.loadLgClientKey(_credentialKey);
       final wsUrl = Uri.parse('ws://$host:$port');
-      _channel = WebSocketChannel.connect(wsUrl);
+      _channel =
+          _channelFactory?.call(wsUrl) ?? WebSocketChannel.connect(wsUrl);
 
       // 1. Send register payload
       final registerPayload = {
@@ -49,10 +65,10 @@ class LgController implements DeviceController {
               "CONTROL_POWER",
               "CONTROL_INPUT_TV",
               "READ_INSTALLED_APPS",
-              "CHECK_3D"
-            ]
-          }
-        }
+              "CHECK_3D",
+            ],
+          },
+        },
       };
 
       _channel!.sink.add(jsonEncode(registerPayload));
@@ -61,27 +77,47 @@ class LgController implements DeviceController {
       final completer = Completer<void>();
       _channel!.stream.listen(
         (message) {
-          final data = jsonDecode(message);
+          // Any inbound frame proves liveness, so clear the pong deadline
+          // before any parsing that can throw. Testing the sentinel after
+          // jsonDecode made this branch unreachable and guaranteed a
+          // disconnect at T+35s.
+          _pongTimeoutTimer?.cancel();
+
+          if (message is! String || message == 'pong') return;
+
+          final Map<String, dynamic> data;
+          try {
+            data = jsonDecode(message) as Map<String, dynamic>;
+          } on FormatException catch (e, s) {
+            log.d('LgController: ignoring non-JSON frame', e, s);
+            return;
+          }
+
           if (data['type'] == 'registered') {
-            _clientKey = data['payload']['client-key'];
+            final payload = data['payload'] as Map<String, dynamic>?;
+            _clientKey = payload?['client-key'] as String?;
             if (_clientKey != null) {
-              _persistence.saveLgClientKey(host, _clientKey!);
+              unawaited(
+                _persistence.saveLgClientKey(_credentialKey, _clientKey!),
+              );
             }
             _connected = true;
             if (!completer.isCompleted) completer.complete();
             _startHeartbeat();
+            reportHealth(ControllerHealth.connected);
             log.d('LgController: Connected to $host');
           } else if (data['type'] == 'error') {
-            if (!completer.isCompleted) completer.completeError(Exception(data['error']));
-          } else if (message == 'pong') {
-            _pongTimeoutTimer?.cancel();
+            if (!completer.isCompleted) {
+              completer.completeError(Exception(data['error']));
+            }
           }
         },
-        onDone: () => _handleDisconnect(),
-        onError: (e) {
-          if (!completer.isCompleted) completer.completeError(e);
+        onDone: _handleDisconnect,
+        onError: (Object e, StackTrace s) {
+          if (!completer.isCompleted) completer.completeError(e, s);
           _handleDisconnect();
         },
+        cancelOnError: false,
       );
 
       await completer.future.timeout(const Duration(seconds: 10));
@@ -107,31 +143,34 @@ class LgController implements DeviceController {
   }
 
   void _handleDisconnect() {
+    final wasConnected = _connected;
     _connected = false;
     _heartbeatTimer?.cancel();
     _pongTimeoutTimer?.cancel();
     _channel?.sink.close();
     _channel = null;
     log.d('LgController: Disconnected from $host');
+    if (wasConnected) reportHealth(ControllerHealth.disconnected);
   }
 
   @override
   Future<void> disconnect() async {
     _handleDisconnect();
+    closeHealth();
   }
 
   @override
   bool get isConnected => _connected;
 
   @override
-  Future<void> sendKey(RemoteKey key) async {
-    if (!_connected || _channel == null) return;
+  Set<RemoteKey> get supportedKeys => _ssapUris.keys.toSet();
+
+  @override
+  Future<CommandResult> sendKey(RemoteKey key) async {
+    if (!_connected || _channel == null) return const CommandNotConnected();
 
     final uri = _ssapUris[key];
-    if (uri == null) {
-      log.d('LgController: Key ${key.name} not supported on LG.');
-      return;
-    }
+    if (uri == null) return CommandUnsupported(key.name);
 
     final payload = {
       "type": "request",
@@ -141,52 +180,64 @@ class LgController implements DeviceController {
 
     try {
       _channel!.sink.add(jsonEncode(payload));
-    } catch (e) {
-      log.e('LgController: Failed to send key ${key.name}', e);
+      return const CommandSent();
+    } catch (e, s) {
+      log.e('LgController: Failed to send key ${key.name}', e, s);
+      return CommandFailed(e, s);
     }
   }
 
   @override
-  Future<void> sendText(String text) async {
-    if (!_connected || _channel == null) return;
-    // LG text input is complex via SSAP, typically uses com.webos.service.ime/insertText
+  Future<CommandResult> sendText(String text) async {
+    if (!_connected || _channel == null) return const CommandNotConnected();
     final payload = {
       "type": "request",
       "id": "request_text",
       "uri": "ssap://com.webos.service.ime/insertText",
-      "payload": {"text": text, "replace": 0}
+      "payload": {"text": text, "replace": 0},
     };
-    _channel!.sink.add(jsonEncode(payload));
+    try {
+      _channel!.sink.add(jsonEncode(payload));
+      return const CommandSent();
+    } catch (e, s) {
+      log.e('LgController: Failed to send text', e, s);
+      return CommandFailed(e, s);
+    }
   }
 
   @override
-  Future<void> launchApp(AppId appId) async {
-    if (!_connected || _channel == null) return;
+  Future<CommandResult> launchApp(AppId appId) async {
+    if (!_connected || _channel == null) return const CommandNotConnected();
 
     final lgAppId = _appIds[appId];
-    if (lgAppId == null) {
-      log.w('LgController: App ${appId.name} not found in mapping.');
-      return;
-    }
+    if (lgAppId == null) return CommandUnsupported(appId.displayName);
 
     final payload = {
       "type": "request",
       "id": "request_launch",
       "uri": "ssap://system.launcher/launch",
-      "payload": {"id": lgAppId}
+      "payload": {"id": lgAppId},
     };
 
     try {
       _channel!.sink.add(jsonEncode(payload));
       log.d('LgController: Launched app ${appId.name} ($lgAppId)');
-    } catch (e) {
-      log.e('LgController: Failed to launch ${appId.name}', e);
+      return const CommandSent();
+    } catch (e, s) {
+      log.e('LgController: Failed to launch ${appId.name}', e, s);
+      return CommandFailed(e, s);
     }
   }
 
+  // webOS exposes no SSAP URI for D-pad arrows; they are reachable only over
+  // the pointer input socket, obtained via
+  // ssap://com.webos.service.networkinput/getPointerInputSocket.
+  //
+  // up/down were previously mapped to set3DOn/set3DOff, so the two most-used
+  // navigation keys toggled the TV's 3D mode - not navigation, and hard for a
+  // user to undo. Until the pointer socket is implemented, these keys report
+  // as unsupported so the UI can say so instead of firing something unrelated.
   static const Map<RemoteKey, String> _ssapUris = {
-    RemoteKey.up: 'ssap://com.webos.service.tv.display/set3DOn', // Placeholder, LG often uses pointer
-    RemoteKey.down: 'ssap://com.webos.service.tv.display/set3DOff',
     RemoteKey.volumeUp: 'ssap://audio/volumeUp',
     RemoteKey.volumeDown: 'ssap://audio/volumeDown',
     RemoteKey.mute: 'ssap://audio/setMute',

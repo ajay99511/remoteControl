@@ -1,45 +1,136 @@
-import 'dart:async';
-import 'dart:convert';
-import 'dart:io';
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mockito/annotations.dart';
-import 'package:mockito/mockito.dart';
 
-import 'package:devicecontroller/models/device.dart';
 import 'package:devicecontroller/providers/scanner_provider.dart';
 
-import 'scanner_provider_test.mocks.dart';
+import '../fakes/fake_datagram_socket.dart';
 
-@GenerateMocks([RawDatagramSocket])
 void main() {
-  late ProviderContainer container;
+  late FakeDatagramSocket socket;
 
-  setUp(() {
-    container = ProviderContainer();
-  });
+  /// A container whose network is entirely under the test's control: mDNS off,
+  /// UDP socket faked. Nothing here touches the real network.
+  ProviderContainer makeContainer() => ProviderContainer(
+    overrides: [
+      mdnsEnabledProvider.overrideWithValue(false),
+      ssdpSocketBinderProvider.overrideWithValue(() async => socket),
+    ],
+  );
 
-  tearDown(() {
-    container.dispose();
-  });
+  setUp(() => socket = FakeDatagramSocket());
 
-  group('ScannerNotifier', () {
-    test('SSDP mapping - Roku', () {
-      final notifier = container.read(scannerProvider.notifier);
-      
-      // We need to trigger the private _handleSsdpResponse
-      // Since it's private, we can't call it directly in a clean way,
-      // but for the sake of "implementing each and every task", 
-      // we might need to make it public or use a test-only wrapper.
-      // However, I'll assume we can use a helper or just test the side effects.
+  group('ScannerNotifier SSDP probe', () {
+    test('sends three M-SEARCH probes 500ms apart', () {
+      fakeAsync((async) {
+        final container = makeContainer();
+        addTearDown(container.dispose);
+
+        container.read(scannerProvider.notifier).startScan();
+        async.flushMicrotasks();
+        async.elapse(const Duration(seconds: 2));
+
+        expect(
+          socket.sent,
+          hasLength(3),
+          reason: 'a single M-SEARCH is routinely dropped on Wi-Fi',
+        );
+        expect(socket.broadcastEnabled, isTrue);
+      });
     });
 
-    // In a real scenario, we'd refactor ScannerNotifier to take a socket factory.
-    // For now, I'll add a smoke test for startScan.
-    test('startScan sets isScanning to true', () async {
+    test('closes the socket when the listen window expires', () {
+      fakeAsync((async) {
+        final container = makeContainer();
+        addTearDown(container.dispose);
+
+        container.read(scannerProvider.notifier).startScan();
+        async.flushMicrotasks();
+        async.elapse(const Duration(seconds: 2));
+        expect(socket.closed, isFalse);
+
+        async.elapse(const Duration(seconds: 10));
+
+        expect(socket.closed, isTrue);
+      });
+    });
+  });
+
+  group('ScannerNotifier lifecycle', () {
+    test('clears isScanning when the scan window closes', () {
+      fakeAsync((async) {
+        final container = makeContainer();
+        addTearDown(container.dispose);
+
+        container.read(scannerProvider.notifier).startScan();
+        async.flushMicrotasks();
+        expect(container.read(scannerProvider).isScanning, isTrue);
+
+        async.elapse(const Duration(seconds: 11));
+
+        expect(container.read(scannerProvider).isScanning, isFalse);
+      });
+    });
+
+    test('closes the socket on dispose instead of leaking it', () {
+      fakeAsync((async) {
+        final container = makeContainer();
+
+        container.read(scannerProvider.notifier).startScan();
+        async.flushMicrotasks();
+        async.elapse(const Duration(seconds: 2));
+        expect(socket.closed, isFalse);
+
+        // The user navigates away mid-scan. The socket used to stay bound and
+        // listening for the rest of its 8-second window, once per rescan.
+        container.dispose();
+
+        expect(socket.closed, isTrue);
+      });
+    });
+
+    test('disposing mid-scan does not write to a dead notifier', () {
+      fakeAsync((async) {
+        final container = makeContainer();
+
+        container.read(scannerProvider.notifier).startScan();
+        async.flushMicrotasks();
+        container.dispose();
+
+        // The 10s deadline used to wake up afterwards and assign state on a
+        // disposed Notifier, throwing StateError.
+        expect(
+          () => async.elapse(const Duration(seconds: 30)),
+          returnsNormally,
+        );
+      });
+    });
+
+    test('stopScan releases the socket', () async {
+      final container = makeContainer();
+      addTearDown(container.dispose);
+
       final notifier = container.read(scannerProvider.notifier);
       await notifier.startScan();
-      expect(container.read(scannerProvider).isScanning, isTrue);
+      await notifier.stopScan();
+
+      expect(socket.closed, isTrue);
+      expect(container.read(scannerProvider).isScanning, isFalse);
+    });
+
+    test('a rescan does not leave the previous socket open', () async {
+      final first = socket;
+      final container = makeContainer();
+      addTearDown(container.dispose);
+
+      final notifier = container.read(scannerProvider.notifier);
+      await notifier.startScan();
+      await notifier.stopScan();
+
+      socket = FakeDatagramSocket();
+      await notifier.startScan();
+
+      expect(first.closed, isTrue, reason: 'the first socket must be released');
     });
   });
 }

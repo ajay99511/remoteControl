@@ -3,12 +3,14 @@ import 'package:http/http.dart' as http;
 
 import '../core/app_logger.dart';
 import '../models/app_id.dart';
+import '../models/command_result.dart';
 import '../models/remote_key.dart';
+import 'controller_health.dart';
 import 'device_controller.dart';
 
 /// Concrete [DeviceController] for Roku devices using the
 /// External Control Protocol (ECP).
-class RokuController implements DeviceController {
+class RokuController with HealthReporting implements DeviceController {
   final String host;
   final int port;
   final http.Client _client;
@@ -48,6 +50,17 @@ class RokuController implements DeviceController {
     RemoteKey.power: 'Power',
     RemoteKey.sleep: 'Sleep',
     RemoteKey.star: 'Star',
+    // Roku ECP has no dedicated digit keys; Lit_ is the correct encoding.
+    RemoteKey.digit0: 'Lit_0',
+    RemoteKey.digit1: 'Lit_1',
+    RemoteKey.digit2: 'Lit_2',
+    RemoteKey.digit3: 'Lit_3',
+    RemoteKey.digit4: 'Lit_4',
+    RemoteKey.digit5: 'Lit_5',
+    RemoteKey.digit6: 'Lit_6',
+    RemoteKey.digit7: 'Lit_7',
+    RemoteKey.digit8: 'Lit_8',
+    RemoteKey.digit9: 'Lit_9',
   };
 
   /// Common Roku App IDs.
@@ -70,6 +83,7 @@ class RokuController implements DeviceController {
           .timeout(const Duration(seconds: 3));
       if (response.statusCode == 200) {
         _connected = true;
+        reportHealth(ControllerHealth.connected);
         log.d('RokuController: Connected to $host:$port');
       } else {
         throw Exception('Roku responded with status ${response.statusCode}');
@@ -85,57 +99,78 @@ class RokuController implements DeviceController {
   Future<void> disconnect() async {
     _connected = false;
     _client.close();
+    reportHealth(ControllerHealth.disconnected);
+    closeHealth();
     log.d('RokuController: Disconnected from $host:$port');
   }
 
   @override
-  Future<void> sendKey(RemoteKey key) async {
-    if (!_connected) return;
+  Set<RemoteKey> get supportedKeys => _keyMap.keys.toSet();
+
+  @override
+  Future<CommandResult> sendKey(RemoteKey key) async {
+    if (!_connected) return const CommandNotConnected();
     final ecpKey = _keyMap[key];
-    if (ecpKey == null) {
-      log.d('RokuController: Key ${key.name} not supported on Roku.');
-      return;
-    }
+    if (ecpKey == null) return CommandUnsupported(key.name);
     try {
       await _client
           .post(_ecpUri('keypress/$ecpKey'))
           .timeout(const Duration(seconds: 3));
-    } catch (e) {
-      log.e('RokuController: Failed to send key $ecpKey', e);
+      return const CommandSent();
+    } catch (e, s) {
+      log.e('RokuController: Failed to send key $ecpKey', e, s);
+      return CommandFailed(e, s);
     }
   }
 
+  /// Roku ECP requires one POST per character, so long input is many round
+  /// trips. Capped for parity with SamsungController, and paced because the
+  /// device drops keypresses above roughly 20/s.
+  static const _maxTextLength = 500;
+  static const _interKeyDelay = Duration(milliseconds: 60);
+
   @override
-  Future<void> sendText(String text) async {
-    if (!_connected) return;
-    for (final rune in text.runes) {
-      final char = String.fromCharCode(rune);
-      final encoded = Uri.encodeComponent(char);
+  Future<CommandResult> sendText(String text) async {
+    if (!_connected) return const CommandNotConnected();
+    if (text.length > _maxTextLength) {
+      log.w(
+        'RokuController: truncating ${text.length} chars to $_maxTextLength',
+      );
+      text = text.substring(0, _maxTextLength);
+    }
+    final runes = text.runes.toList();
+    for (var i = 0; i < runes.length; i++) {
+      if (!_connected) return const CommandNotConnected();
+      final char = String.fromCharCode(runes[i]);
       try {
         await _client
-            .post(_ecpUri('keypress/Lit_$encoded'))
+            .post(_ecpUri('keypress/Lit_${Uri.encodeComponent(char)}'))
             .timeout(const Duration(seconds: 3));
-      } catch (e) {
-        log.e('RokuController: Failed to send char "$char"', e);
+      } catch (e, s) {
+        // Abort rather than skip: continuing would type a different string
+        // than the user asked for, silently.
+        log.e('RokuController: failed after $i of ${runes.length} chars', e, s);
+        return CommandFailed(e, s);
       }
+      if (i + 1 < runes.length) await Future<void>.delayed(_interKeyDelay);
     }
+    return const CommandSent();
   }
 
   @override
-  Future<void> launchApp(AppId appId) async {
-    if (!_connected) return;
+  Future<CommandResult> launchApp(AppId appId) async {
+    if (!_connected) return const CommandNotConnected();
     final rokuAppId = _appIds[appId];
-    if (rokuAppId == null) {
-      log.w('RokuController: App ${appId.name} not found in mapping.');
-      return;
-    }
+    if (rokuAppId == null) return CommandUnsupported(appId.displayName);
     try {
       await _client
           .post(_ecpUri('launch/$rokuAppId'))
           .timeout(const Duration(seconds: 3));
       log.d('RokuController: Launched app ${appId.name} ($rokuAppId)');
-    } catch (e) {
-      log.e('RokuController: Failed to launch ${appId.name}', e);
+      return const CommandSent();
+    } catch (e, s) {
+      log.e('RokuController: Failed to launch ${appId.name}', e, s);
+      return CommandFailed(e, s);
     }
   }
 

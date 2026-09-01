@@ -1,13 +1,18 @@
 import 'dart:async';
-import 'dart:ui';
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:lucide_icons/lucide_icons.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
+
+import '../theme/app_colors.dart';
 
 import '../models/device.dart';
+import 'manual_connect_dialog.dart';
 import '../providers/connection_provider.dart';
 import '../providers/scanner_provider.dart';
+import '../widgets/ambient_background.dart';
 
 class DeviceScannerScreen extends ConsumerStatefulWidget {
   const DeviceScannerScreen({super.key});
@@ -26,172 +31,13 @@ class _DeviceScannerScreenState extends ConsumerState<DeviceScannerScreen> {
     });
   }
 
-  void _handleManualConnect() {
-    showDialog(
+  Future<void> _handleManualConnect() async {
+    final device = await showDialog<Device>(
       context: context,
-      builder: (context) {
-        final TextEditingController ipController = TextEditingController();
-        DeviceType selectedType = DeviceType.roku;
-        int selectedPort = 8060;
-        String? ipError;
-
-        final defaultPorts = {
-          DeviceType.roku: 8060,
-          DeviceType.samsung: 8001,
-          DeviceType.lg: 3000,
-          DeviceType.vizio: 7345,
-        };
-
-        final ipRegex = RegExp(
-          r'^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}$' // IPv4
-          r'|^([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$', // IPv6
-        );
-
-        return StatefulBuilder(builder: (context, setDialogState) {
-          return AlertDialog(
-            backgroundColor: const Color(0xFF18181B),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-            ),
-            title: const Text(
-              'Connect via IP',
-              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-            ),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const Text(
-                    'Device Type',
-                    style: TextStyle(color: Colors.white70, fontSize: 12),
-                  ),
-                  const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButton<DeviceType>(
-                        value: selectedType,
-                        dropdownColor: const Color(0xFF18181B),
-                        style: const TextStyle(color: Colors.white),
-                        isExpanded: true,
-                        items: [
-                          DeviceType.roku,
-                          DeviceType.samsung,
-                          DeviceType.lg,
-                          DeviceType.vizio
-                        ].map((t) {
-                          return DropdownMenuItem(
-                            value: t,
-                            child: Text(t.name.toUpperCase()),
-                          );
-                        }).toList(),
-                        onChanged: (t) {
-                          if (t != null) {
-                            setDialogState(() {
-                              selectedType = t;
-                              selectedPort = defaultPorts[t] ?? 80;
-                            });
-                          }
-                        },
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'IP Address',
-                    style: TextStyle(color: Colors.white70, fontSize: 12),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: ipController,
-                    style: const TextStyle(color: Colors.white),
-                    onChanged: (v) {
-                      setDialogState(() {
-                        ipError = ipRegex.hasMatch(v) ? null : 'Invalid IP address';
-                      });
-                    },
-                    decoration: InputDecoration(
-                      hintText: 'e.g., 192.168.1.105',
-                      hintStyle: const TextStyle(color: Colors.grey),
-                      errorText: ipError,
-                      filled: true,
-                      fillColor: Colors.black.withValues(alpha: 0.2),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide.none,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Port',
-                    style: TextStyle(color: Colors.white70, fontSize: 12),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: TextEditingController(text: '$selectedPort'),
-                    style: const TextStyle(color: Colors.white),
-                    keyboardType: TextInputType.number,
-                    onChanged: (v) {
-                      selectedPort = int.tryParse(v) ?? selectedPort;
-                    },
-                    decoration: InputDecoration(
-                      filled: true,
-                      fillColor: Colors.black.withValues(alpha: 0.2),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide.none,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
-              ),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.indigoAccent,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                onPressed: (ipError == null && ipController.text.isNotEmpty)
-                    ? () {
-                        Navigator.pop(context);
-                        final device = Device(
-                          id: 'manual-${DateTime.now().millisecondsSinceEpoch}',
-                          name: 'Manual ${selectedType.name.toUpperCase()}',
-                          type: selectedType,
-                          model: 'Custom IP',
-                          signal: 100,
-                          ip: ipController.text,
-                          port: selectedPort,
-                        );
-                        ref.read(connectionProvider.notifier).connect(device);
-                      }
-                    : null,
-                child: const Text(
-                  'Connect',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ],
-          );
-        });
-      },
+      builder: (_) => const ManualConnectDialog(),
     );
+    if (device == null || !mounted) return;
+    await ref.read(connectionProvider.notifier).connect(device);
   }
 
   @override
@@ -215,59 +61,10 @@ class _DeviceScannerScreenState extends ConsumerState<DeviceScannerScreen> {
     });
 
     return Scaffold(
-      backgroundColor: const Color(0xFF09090B),
+      backgroundColor: AppColors.background,
       body: Stack(
         children: [
-          // Background Glow Orbs
-          Positioned(
-            top: -100,
-            left: -100,
-            child: Container(
-              width: 300,
-              height: 300,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.indigoAccent.withValues(alpha: 0.15),
-              ),
-            ),
-            /*
-            .animate(
-              onPlay: (controller) => controller.repeat(reverse: true),
-            )
-            .scale(
-              duration: 4.seconds,
-              begin: const Offset(1, 1),
-              end: const Offset(1.2, 1.2),
-            ),
-            */
-          ),
-          Positioned(
-            bottom: -50,
-            right: -50,
-            child: Container(
-              width: 250,
-              height: 250,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.purpleAccent.withValues(alpha: 0.15),
-              ),
-            ),
-            /*
-            .animate(
-              onPlay: (controller) => controller.repeat(reverse: true),
-            )
-            .scale(
-              duration: 5.seconds,
-              begin: const Offset(1, 1),
-              end: const Offset(1.3, 1.3),
-            ),
-            */
-          ),
-          // Blur Layer
-          BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 50, sigmaY: 50),
-            child: Container(color: Colors.transparent),
-          ),
+          const AmbientBackground(),
           // Main Content
           SafeArea(
             child: Padding(
@@ -280,15 +77,15 @@ class _DeviceScannerScreenState extends ConsumerState<DeviceScannerScreen> {
                 children: [
                   const SizedBox(height: 32),
                   const Text(
-                    'Discover',
-                    style: TextStyle(
-                      fontSize: 40,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white,
-                      letterSpacing: -1,
-                    ),
-                    textAlign: TextAlign.center,
-                  )
+                        'Discover',
+                        style: TextStyle(
+                          fontSize: 40,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                          letterSpacing: -1,
+                        ),
+                        textAlign: TextAlign.center,
+                      )
                       .animate()
                       .fadeIn(duration: 500.ms)
                       .moveY(begin: -20, end: 0),
@@ -297,8 +94,8 @@ class _DeviceScannerScreenState extends ConsumerState<DeviceScannerScreen> {
                     scanner.isScanning
                         ? 'Looking for nearby smart devices...'
                         : scanner.devices.isEmpty
-                            ? 'No devices found'
-                            : '${scanner.devices.length} nearby device(s) found',
+                        ? 'No devices found'
+                        : '${scanner.devices.length} nearby device(s) found',
                     style: TextStyle(
                       color: Colors.white.withValues(alpha: 0.6),
                       fontSize: 16,
@@ -324,40 +121,40 @@ class _DeviceScannerScreenState extends ConsumerState<DeviceScannerScreen> {
                   ),
                   if (connection.status == ConnectionStatus.connecting)
                     Container(
-                      margin: const EdgeInsets.only(top: 24),
-                      padding: const EdgeInsets.symmetric(
-                        vertical: 16,
-                        horizontal: 24,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.05),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.1),
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.indigoAccent,
+                          margin: const EdgeInsets.only(top: 24),
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 16,
+                            horizontal: 24,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.05),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.1),
                             ),
                           ),
-                          const SizedBox(width: 16),
-                          const Text(
-                            'Connecting to device...',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w500,
-                            ),
+                          child: const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.indigoAccent,
+                                ),
+                              ),
+                              SizedBox(width: 16),
+                              Text(
+                                'Connecting to device...',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
-                    )
+                        )
                         .animate()
                         .fadeIn(duration: 300.ms)
                         .slideY(begin: 0.2, end: 0),
@@ -372,98 +169,104 @@ class _DeviceScannerScreenState extends ConsumerState<DeviceScannerScreen> {
   }
 
   Widget _buildScanningAnimation() {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Stack(
-            alignment: Alignment.center,
-            children: [
-              Container(
-                width: 120,
-                height: 120,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: Colors.indigoAccent.withValues(alpha: 0.3),
-                    width: 2,
-                  ),
-                ),
-              )
-                  .animate(onPlay: (controller) => controller.repeat())
-                  .scale(
-                    duration: 2.seconds,
-                    begin: const Offset(1, 1),
-                    end: const Offset(2.5, 2.5),
-                  )
-                  .fadeOut(duration: 2.seconds),
-              Container(
-                width: 120,
-                height: 120,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: Colors.purpleAccent.withValues(alpha: 0.3),
-                    width: 2,
-                  ),
-                ),
-              )
-                  .animate(
-                    onPlay: (controller) => controller.repeat(),
-                    delay: 600.ms,
-                  )
-                  .scale(
-                    duration: 2.seconds,
-                    begin: const Offset(1, 1),
-                    end: const Offset(2.5, 2.5),
-                  )
-                  .fadeOut(duration: 2.seconds),
-              Container(
-                width: 120,
-                height: 120,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: LinearGradient(
-                    colors: [
-                      Colors.indigoAccent.withValues(alpha: 0.2),
-                      Colors.purpleAccent.withValues(alpha: 0.2),
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.1),
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.indigoAccent.withValues(alpha: 0.2),
-                      blurRadius: 30,
-                      spreadRadius: 10,
+    // Isolated: this pulses forever while a scan runs, and without a
+    // boundary it repaints everything sharing its layer.
+    return RepaintBoundary(
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Stack(
+              alignment: Alignment.center,
+              children: [
+                Container(
+                      width: 120,
+                      height: 120,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: Colors.indigoAccent.withValues(alpha: 0.3),
+                          width: 2,
+                        ),
+                      ),
+                    )
+                    .animate(onPlay: (controller) => controller.repeat())
+                    .scale(
+                      duration: 2.seconds,
+                      begin: const Offset(1, 1),
+                      end: const Offset(2.5, 2.5),
+                    )
+                    .fadeOut(duration: 2.seconds),
+                Container(
+                      width: 120,
+                      height: 120,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: Colors.purpleAccent.withValues(alpha: 0.3),
+                          width: 2,
+                        ),
+                      ),
+                    )
+                    .animate(
+                      onPlay: (controller) => controller.repeat(),
+                      delay: 600.ms,
+                    )
+                    .scale(
+                      duration: 2.seconds,
+                      begin: const Offset(1, 1),
+                      end: const Offset(2.5, 2.5),
+                    )
+                    .fadeOut(duration: 2.seconds),
+                Container(
+                  width: 120,
+                  height: 120,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: LinearGradient(
+                      colors: [
+                        Colors.indigoAccent.withValues(alpha: 0.2),
+                        Colors.purpleAccent.withValues(alpha: 0.2),
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
                     ),
-                  ],
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.1),
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.indigoAccent.withValues(alpha: 0.2),
+                        blurRadius: 30,
+                        spreadRadius: 10,
+                      ),
+                    ],
+                  ),
+                  child: const Icon(
+                    LucideIcons.radar,
+                    color: Colors.white,
+                    size: 48,
+                  ),
                 ),
-                child: const Icon(
-                  LucideIcons.radar,
-                  color: Colors.white,
-                  size: 48,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 40),
-          const Text(
-            'Scanning Network...',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: Colors.white70,
-              letterSpacing: 2.0,
+              ],
             ),
-          )
-              .animate(onPlay: (controller) => controller.repeat(reverse: true))
-              .fadeIn(duration: 1.seconds)
-              .fadeOut(duration: 1.seconds),
-        ],
+            const SizedBox(height: 40),
+            const Text(
+                  'Scanning Network...',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white70,
+                    letterSpacing: 2.0,
+                  ),
+                )
+                .animate(
+                  onPlay: (controller) => controller.repeat(reverse: true),
+                )
+                .fadeIn(duration: 1.seconds)
+                .fadeOut(duration: 1.seconds),
+          ],
+        ),
       ),
     );
   }
@@ -507,10 +310,20 @@ class _DeviceScannerScreenState extends ConsumerState<DeviceScannerScreen> {
                   itemCount: devices.length,
                   itemBuilder: (context, index) {
                     final device = devices[index];
-                    return _buildDeviceItem(device)
-                        .animate()
-                        .fadeIn(duration: 400.ms, delay: (index * 100).ms)
-                        .slideX(begin: 0.1, end: 0);
+                    // RepaintBoundary isolates each row so an animating
+                    // neighbour does not dirty the whole list layer, and the
+                    // stagger is capped: an unbounded index * 100ms delay
+                    // meant the 20th device faded in two seconds late, and
+                    // the animation restarted on every scroll recycle.
+                    return RepaintBoundary(
+                      child: _buildDeviceItem(device)
+                          .animate()
+                          .fadeIn(
+                            duration: 400.ms,
+                            delay: (math.min(index, 6) * 60).ms,
+                          )
+                          .slideX(begin: 0.1, end: 0),
+                    );
                   },
                 ),
         ),
@@ -546,9 +359,14 @@ class _DeviceScannerScreenState extends ConsumerState<DeviceScannerScreen> {
               child: _buildActionButton(
                 icon: LucideIcons.refreshCw,
                 label: 'Rescan',
-                onTap: () {
-                  ref.read(scannerProvider.notifier).stopScan();
-                  ref.read(scannerProvider.notifier).startScan();
+                onTap: () async {
+                  // stopScan is async: not awaiting it let startScan append
+                  // new Discovery handles while the previous teardown was
+                  // still in flight, orphaning them past the next stopScan.
+                  final notifier = ref.read(scannerProvider.notifier);
+                  await notifier.stopScan();
+                  if (!context.mounted) return;
+                  await notifier.startScan();
                 },
                 isPrimary: true,
               ),
@@ -583,62 +401,67 @@ class _DeviceScannerScreenState extends ConsumerState<DeviceScannerScreen> {
           ),
         ],
       ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(20),
-          highlightColor: Colors.white.withValues(alpha: 0.05),
-          splashColor: Colors.indigoAccent.withValues(alpha: 0.2),
-          onTap: () => ref.read(connectionProvider.notifier).connect(device),
-          child: Padding(
-            padding: const EdgeInsets.all(20.0),
-            child: Row(
-              children: [
-                Container(
-                  width: 56,
-                  height: 56,
-                  decoration: BoxDecoration(
-                    color: _deviceColor(device.type).withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: _deviceColor(device.type).withValues(alpha: 0.5),
+      child: Semantics(
+        label: '${device.name}, ${device.type.name} device, ${device.model}',
+        hint: 'Connect to this device',
+        button: true,
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(20),
+            highlightColor: Colors.white.withValues(alpha: 0.05),
+            splashColor: Colors.indigoAccent.withValues(alpha: 0.2),
+            onTap: () => ref.read(connectionProvider.notifier).connect(device),
+            child: Padding(
+              padding: const EdgeInsets.all(20.0),
+              child: Row(
+                children: [
+                  Container(
+                    width: 56,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      color: _deviceColor(device.type).withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: _deviceColor(device.type).withValues(alpha: 0.5),
+                      ),
+                    ),
+                    child: Icon(
+                      _deviceIcon(device.type),
+                      color: _deviceColor(device.type),
+                      size: 28,
                     ),
                   ),
-                  child: Icon(
-                    _deviceIcon(device.type),
-                    color: _deviceColor(device.type),
-                    size: 28,
-                  ),
-                ),
-                const SizedBox(width: 20),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        device.name,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
+                  const SizedBox(width: 20),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          device.name,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        device.model,
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.6),
-                          fontSize: 13,
+                        const SizedBox(height: 4),
+                        Text(
+                          device.model,
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.6),
+                            fontSize: 13,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-                Icon(
-                  LucideIcons.chevronRight,
-                  color: Colors.white.withValues(alpha: 0.3),
-                ),
-              ],
+                  Icon(
+                    LucideIcons.chevronRight,
+                    color: Colors.white.withValues(alpha: 0.3),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -694,41 +517,45 @@ class _DeviceScannerScreenState extends ConsumerState<DeviceScannerScreen> {
     required VoidCallback onTap,
     required bool isPrimary,
   }) {
-    return Material(
-      color: isPrimary
-          ? Colors.indigoAccent
-          : Colors.white.withValues(alpha: 0.05),
-      borderRadius: BorderRadius.circular(16),
-      child: InkWell(
-        onTap: onTap,
+    return Semantics(
+      label: label,
+      button: true,
+      child: Material(
+        color: isPrimary
+            ? Colors.indigoAccent
+            : Colors.white.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(16),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            border: isPrimary
-                ? null
-                : Border.all(color: Colors.white.withValues(alpha: 0.1)),
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                icon,
-                size: 20,
-                color: isPrimary ? Colors.white : Colors.white70,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                label,
-                style: TextStyle(
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              border: isPrimary
+                  ? null
+                  : Border.all(color: Colors.white.withValues(alpha: 0.1)),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  icon,
+                  size: 20,
                   color: isPrimary ? Colors.white : Colors.white70,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
                 ),
-              ),
-            ],
+                const SizedBox(width: 8),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: isPrimary ? Colors.white : Colors.white70,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

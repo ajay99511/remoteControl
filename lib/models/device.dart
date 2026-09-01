@@ -42,64 +42,94 @@ enum DeviceType {
   String toJson() => name;
 }
 
+/// Default control port per device type.
+///
+/// Single source of truth: these five numbers were previously duplicated
+/// across the connection factory, the manual-connect dialog and both
+/// discovery matchers, free to drift apart.
+const Map<DeviceType, int> kDefaultPorts = {
+  DeviceType.roku: 8060,
+  DeviceType.samsung: 8001,
+  DeviceType.lg: 3000,
+  DeviceType.vizio: 7345,
+};
+
 @immutable
 class Device {
   final String id;
   final String name;
   final DeviceType type;
   final String model;
-  final int signal;
   final String? ip;
   final int? port;
+
+  /// A identifier that survives the device changing address.
+  ///
+  /// SSDP responses carry one in their USN header; mDNS carries the Bonjour
+  /// instance name. Null for manually entered devices, where we have nothing
+  /// but an address to go on.
+  final String? uid;
 
   const Device({
     required this.id,
     required this.name,
     required this.type,
     required this.model,
-    required this.signal,
     this.ip,
     this.port,
+    this.uid,
   });
 
+  /// The key under which this device's secrets are filed.
+  ///
+  /// Prefers [uid] so a pairing token, an LG client key and a TOFU
+  /// certificate pin stay attached to the television rather than to whatever
+  /// address the router last handed it. Keying on the address meant a DHCP
+  /// lease renewal orphaned all three: the TV re-prompted for pairing, and
+  /// the certificate pin silently re-pinned against the "new" host, which
+  /// quietly weakens the very control that TOFU exists to provide.
+  ///
+  /// Falls back to the address when there is no stable id, which is no worse
+  /// than the previous behaviour.
+  String get credentialKey => uid ?? ip ?? id;
+
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'type': type.toJson(),
-        'model': model,
-        'signal': signal,
-        'ip': ip,
-        'port': port,
-      };
+    'id': id,
+    'name': name,
+    'type': type.toJson(),
+    'model': model,
+    'ip': ip,
+    'port': port,
+    'uid': uid,
+  };
 
   factory Device.fromJson(Map<String, dynamic> json) => Device(
-        id: json['id'] as String,
-        name: json['name'] as String,
-        type: DeviceType.fromString(json['type'] as String? ?? 'unknown'),
-        model: json['model'] as String,
-        signal: json['signal'] as int,
-        ip: json['ip'] as String?,
-        port: json['port'] as int?,
-      );
+    id: json['id'] as String,
+    name: json['name'] as String,
+    type: DeviceType.fromString(json['type'] as String? ?? 'unknown'),
+    model: json['model'] as String,
+    ip: json['ip'] as String?,
+    port: json['port'] as int?,
+    uid: json['uid'] as String?,
+  );
 
   Device copyWith({
     String? id,
     String? name,
     DeviceType? type,
     String? model,
-    int? signal,
     String? ip,
     int? port,
-  }) =>
-      Device(
-        id: id ?? this.id,
-        name: name ?? this.name,
-        type: type ?? this.type,
-        model: model ?? this.model,
-        signal: signal ?? this.signal,
-        ip: ip ?? this.ip,
-        port: port ?? this.port,
-      );
+    String? uid,
+  }) => Device(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    type: type ?? this.type,
+    model: model ?? this.model,
+    ip: ip ?? this.ip,
+    port: port ?? this.port,
+    uid: uid ?? this.uid,
+  );
 
   @override
   bool operator ==(Object other) =>
@@ -110,12 +140,12 @@ class Device {
           name == other.name &&
           type == other.type &&
           model == other.model &&
-          signal == other.signal &&
           ip == other.ip &&
-          port == other.port;
+          port == other.port &&
+          uid == other.uid;
 
   @override
-  int get hashCode => Object.hash(id, name, type, model, signal, ip, port);
+  int get hashCode => Object.hash(id, name, type, model, ip, port, uid);
 
   @override
   String toString() =>
