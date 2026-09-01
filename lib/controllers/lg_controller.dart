@@ -216,6 +216,9 @@ class LgController with HealthReporting implements DeviceController {
     }
 
     try {
+      // A TV that registers twice would otherwise leave the first socket open
+      // with nothing holding a reference to it.
+      _closePointerSocket();
       _pointerChannel =
           _channelFactory?.call(url) ?? WebSocketChannel.connect(url);
       log.d('LgController: pointer input socket open, D-pad available');
