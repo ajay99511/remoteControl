@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:devicecontroller/models/device.dart';
 import 'package:devicecontroller/providers/scanner_provider.dart';
 import 'package:devicecontroller/services/device_description.dart';
+import 'package:devicecontroller/services/ssdp.dart';
 
 import '../fakes/fake_datagram_socket.dart';
 

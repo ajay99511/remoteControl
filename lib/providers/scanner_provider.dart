@@ -11,6 +11,7 @@ import '../core/app_logger.dart';
 import '../models/device.dart';
 import '../services/device_description.dart';
 import '../services/device_persistence_service.dart';
+import '../services/ssdp.dart';
 import 'discovery_parsers.dart';
 
 /// Immutable state for the device scanner.
@@ -54,17 +55,6 @@ class ScannerState {
   );
 }
 
-/// Binds the UDP socket the SSDP probe listens on.
-///
-/// Injected so the scanner's resource handling is testable. Overridden in
-/// tests; production binds a real socket.
-typedef DatagramSocketBinder = Future<RawDatagramSocket> Function();
-
-final ssdpSocketBinderProvider = Provider<DatagramSocketBinder>(
-  (_) =>
-      () => RawDatagramSocket.bind(InternetAddress.anyIPv4, 0),
-);
-
 /// Whether to run mDNS/NSD discovery. Off on web and Windows, which nsd does
 /// not support; overridden in tests so they never touch the network.
 final mdnsEnabledProvider = Provider<bool>(
@@ -90,22 +80,6 @@ class ScannerNotifier extends Notifier<ScannerState> {
   static const _ssdpListenWindow = Duration(seconds: 8);
   static const _ssdpProbeCount = 3;
   static const _ssdpProbeInterval = Duration(milliseconds: 500);
-  static const _ssdpPort = 1900;
-  static const _ssdpMulticast = '239.255.255.250';
-
-  /// Search targets, most specific first.
-  ///
-  /// `ssdp:all` alone asks every UPnP device on the segment to answer, which
-  /// is noisy, slower to filter, and something some access points rate-limit.
-  /// Real remotes ask for what they can control: Roku defines `roku:ecp`, and
-  /// DIAL is the multiscreen standard Roku, Samsung and Vizio all implement.
-  /// `ssdp:all` stays last so anything not covered still turns up.
-  static const _searchTargets = [
-    'roku:ecp',
-    'urn:dial-multiscreen-org:service:dial:1',
-    'urn:schemas-upnp-org:device:MediaRenderer:1',
-    'ssdp:all',
-  ];
 
   final List<Discovery> _discoveries = [];
 
@@ -364,21 +338,21 @@ class ScannerNotifier extends Notifier<ScannerState> {
       _ssdpDeadline?.cancel();
       _ssdpDeadline = Timer(_ssdpListenWindow, _releaseSsdp);
 
-      final multicastAddress = InternetAddress(_ssdpMulticast);
+      final multicastAddress = InternetAddress(ssdpMulticastAddress);
 
       // One probe per search target, repeated: a single M-SEARCH is routinely
       // dropped on Wi-Fi and UDP offers no retransmission of its own.
       for (var round = 0; round < _ssdpProbeCount; round++) {
-        for (final target in _searchTargets) {
+        for (final target in ssdpSearchTargets) {
           if (_disposed ||
               _ssdpSocket == null ||
               generation != _scanGeneration) {
             return;
           }
           socket.send(
-            utf8.encode(_mSearch(target)),
+            utf8.encode(ssdpMSearch(target)),
             multicastAddress,
-            _ssdpPort,
+            ssdpPort,
           );
         }
         if (round < _ssdpProbeCount - 1) {
@@ -389,18 +363,6 @@ class ScannerNotifier extends Notifier<ScannerState> {
       log.e('ScannerNotifier: SSDP error', e, s);
     }
   }
-
-  /// An M-SEARCH request for one search target.
-  ///
-  /// MX is the maximum seconds a device may wait before replying; UPnP
-  /// requires 1-5, and the previous single ssdp:all probe used 3, spreading
-  /// every device's answer across three seconds for no benefit.
-  static String _mSearch(String searchTarget) =>
-      'M-SEARCH * HTTP/1.1\r\n'
-      'HOST: $_ssdpMulticast:$_ssdpPort\r\n'
-      'MAN: "ssdp:discover"\r\n'
-      'MX: 2\r\n'
-      'ST: $searchTarget\r\n\r\n';
 
   void _handleSsdpResponse(String response, String sourceIp) {
     final device = parseSsdpResponse(response, sourceIp);

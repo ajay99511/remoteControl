@@ -18,6 +18,7 @@ import '../models/device.dart';
 import '../models/remote_key.dart';
 import '../services/connectivity_service.dart';
 import '../services/device_persistence_service.dart';
+import '../services/device_resolver.dart';
 
 /// Connection status for the active device session.
 enum ConnectionStatus { disconnected, connecting, connected, error }
@@ -63,6 +64,7 @@ class ConnectionNotifier extends Notifier<DeviceConnectionState> {
   late final DevicePersistenceService _persistence;
   late final ConnectivityService _connectivity;
   late final DeviceControllerFactory _makeController;
+  late final DeviceAddressResolver _resolveAddress;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
   StreamSubscription<ControllerHealth>? _healthSub;
 
@@ -71,6 +73,7 @@ class ConnectionNotifier extends Notifier<DeviceConnectionState> {
     _persistence = ref.read(devicePersistenceProvider);
     _connectivity = ref.read(connectivityServiceProvider);
     _makeController = ref.read(deviceControllerFactoryProvider);
+    _resolveAddress = ref.read(deviceAddressResolverProvider);
 
     _connectivitySub = _connectivity.onConnectivityChanged.listen(
       _onConnectivityChanged,
@@ -167,38 +170,64 @@ class ConnectionNotifier extends Notifier<DeviceConnectionState> {
   Future<void> _connectWithBackoff(Device device) async {
     final epoch = ++_attemptEpoch;
 
-    for (var attempt = 0; attempt <= _maxRetries; attempt++) {
+    // The address is the one thing about a remembered device that the app
+    // does not control; the router may have handed it to something else since
+    // the last session. One re-resolution per chain corrects that.
+    var target = device;
+    var lookedAgain = false;
+
+    var attempt = 0;
+    while (true) {
       if (_isSuperseded(epoch)) return;
 
       try {
-        final controller = _makeController(device);
+        final controller = _makeController(target);
         _controller = controller;
         await controller.connect();
-        await _persistence.saveDevice(device);
+        await _persistence.saveDevice(target);
         // Remembered only once it has actually answered: a device that never
         // connected is a typo, not something to offer on the next scan.
-        await _persistence.rememberDevice(device);
+        await _persistence.rememberDevice(target);
 
         if (_isSuperseded(epoch)) return;
-        _watchHealth(controller, device);
+        _watchHealth(controller, target);
         state = DeviceConnectionState(
           status: ConnectionStatus.connected,
-          device: device,
+          device: target,
         );
-        log.d('ConnectionNotifier: Successfully connected to ${device.name}');
+        log.d('ConnectionNotifier: Successfully connected to ${target.name}');
         return;
       } catch (e, s) {
-        final lastAttempt = attempt == _maxRetries;
-        if (!_isRetryable(e) || lastAttempt) {
+        if (_isRetryable(e) && !lookedAgain && target.uid != null) {
+          // Asked once, before spending the retry budget on an address that
+          // may no longer be this device's. Five multicast sweeps per connect
+          // would be a burst of broadcast traffic for an answer that does not
+          // change between attempts.
+          lookedAgain = true;
+          final found = await _resolveAddress(target);
+          if (_isSuperseded(epoch)) return;
+          if (found != null && found.ip != target.ip) {
+            log.i(
+              'ConnectionNotifier: ${target.name} answered at ${found.ip}, '
+              'not ${target.ip}',
+            );
+            target = found;
+            // New information, so no backoff: try it straight away. This does
+            // not consume an attempt.
+            continue;
+          }
+        }
+
+        if (!_isRetryable(e) || attempt >= _maxRetries) {
           log.e(
-            'ConnectionNotifier: Connection to ${device.name} failed',
+            'ConnectionNotifier: Connection to ${target.name} failed',
             e,
             s,
           );
           if (_isSuperseded(epoch)) return;
           state = DeviceConnectionState(
             status: ConnectionStatus.error,
-            device: device,
+            device: target,
             errorMessage: _userMessage(e),
           );
           return;
@@ -208,9 +237,10 @@ class ConnectionNotifier extends Notifier<DeviceConnectionState> {
         // from [0, ceiling] rather than the ceiling itself, so retries from
         // multiple clients do not re-synchronise.
         final ceiling = _baseDelay * (1 << attempt);
+        attempt++;
         log.w(
-          'ConnectionNotifier: attempt ${attempt + 1}/$_maxRetries for '
-          '${device.name} failed, backing off - $e',
+          'ConnectionNotifier: attempt $attempt/$_maxRetries for '
+          '${target.name} failed, backing off - $e',
         );
         await Future<void>.delayed(
           Duration(milliseconds: _rng.nextInt(ceiling.inMilliseconds + 1)),
