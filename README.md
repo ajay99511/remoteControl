@@ -88,6 +88,27 @@ flutter test --coverage
 `unawaited_futures`, `cancel_subscriptions` — because each one would have
 caught a defect that shipped. See `AUDIT_AND_STANDARDS_ANALYSIS.md`.
 
+## Diagnosing "it will not connect"
+
+`tool/probe_network.dart` answers, from a machine on the same Wi-Fi, whether a
+device is reachable at all - before any app code is blamed:
+
+```
+dart run tool/probe_network.dart              # this machine's subnet
+dart run tool/probe_network.dart 192.168.1    # a specific subnet
+```
+
+It sends the app's exact M-SEARCH, then sweeps the subnet for every vendor
+control port over TCP, then issues the exact Roku ECP request the controller
+issues. The TCP sweep is the conclusive step: a host firewall can hide SSDP
+replies (they arrive from `<tv>:1900` while the request went to
+`239.255.255.250:1900`, which stateful filters do not match as one flow) but
+cannot hide an outbound TCP connect.
+
+The tool stands alone rather than importing the app, so that it runs under the
+plain Dart VM; `test/tool/probe_network_test.dart` asserts it asks byte-for-byte
+what the app asks, and scans every port a controller connects on.
+
 ## Known release blockers
 
 1. **`applicationId` is still `com.example.devicecontroller`**
@@ -101,6 +122,19 @@ caught a defect that shipped. See `AUDIT_AND_STANDARDS_ANALYSIS.md`.
    bad build cannot be superseded remotely.
 4. **Vizio pairing (PIN entry) is not implemented.** An unpaired TV is
    correctly reported as needing pairing, but there is no flow to complete it.
+5. **No iOS multicast entitlement.** iOS 14 and later require
+   `com.apple.developer.networking.multicast` to send to a multicast address,
+   and Apple grants it only on request. There is no `.entitlements` file, so
+   SSDP discovery cannot work on a real iPhone or iPad - Bonjour/mDNS still
+   can, but Roku does not advertise over Bonjour, so a Roku would never be
+   discovered on iOS. Manual IP is unaffected.
+
+Android cleartext HTTP was checked and deliberately left alone: Roku ECP is
+plain `http://` and Android blocks cleartext by default since API 28, but that
+policy is enforced by the Java HTTP stacks, and this app reaches the network
+through `dart:io`, which does not consult it. Adding
+`usesCleartextTraffic="true"` would weaken the app's posture app-wide to fix a
+problem it does not have.
 
 ## Permissions
 
