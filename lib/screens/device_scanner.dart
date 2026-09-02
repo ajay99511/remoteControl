@@ -284,35 +284,7 @@ class _DeviceScannerScreenState extends ConsumerState<DeviceScannerScreen> {
       children: [
         Expanded(
           child: devices.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(24),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.05),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          LucideIcons.wifiOff,
-                          size: 48,
-                          color: Colors.white.withValues(alpha: 0.5),
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      Text(
-                        'No devices found.\nEnsure you share the same Wi-Fi network.',
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.5),
-                          fontSize: 16,
-                          height: 1.5,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
-                  ),
-                )
+              ? const _NothingFound()
               : ListView.builder(
                   physics: const BouncingScrollPhysics(),
                   itemCount: devices.length,
@@ -400,7 +372,34 @@ class _DeviceScannerScreenState extends ConsumerState<DeviceScannerScreen> {
     );
   }
 
+  /// Explains why a row cannot be tapped, instead of swallowing the tap.
+  void _explainUnsupported(Device device) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          '${device.name} is a ${device.type.label} device, which is not '
+          'supported yet.',
+        ),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    );
+  }
+
   Widget _buildDeviceItem(Device device, {required bool isRemembered}) {
+    // Discovery lists whatever answers, including hosts with no transport
+    // here. Offering them as ordinary rows meant a user picked their
+    // Chromecast, waited, and was told it failed - when the controller throws
+    // on the first line of connect() and never had a chance.
+    final controllable = device.type.isControllable;
+    return Opacity(
+      // Reads as inert before it is touched, not only after.
+      opacity: controllable ? 1 : 0.55,
+      child: _deviceCard(device, isRemembered, controllable),
+    );
+  }
+
+  Widget _deviceCard(Device device, bool isRemembered, bool controllable) {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
@@ -418,8 +417,12 @@ class _DeviceScannerScreenState extends ConsumerState<DeviceScannerScreen> {
       child: Semantics(
         label:
             '${device.name}, ${device.type.name} device, ${device.model}'
-            '${isRemembered ? ', saved, not seen on this network yet' : ''}',
-        hint: 'Connect to this device',
+            '${isRemembered ? ', saved, not seen on this network yet' : ''}'
+            '${controllable ? '' : ', not supported'}',
+        hint: controllable
+            ? 'Connect to this device'
+            : 'This device type is not supported yet',
+        enabled: controllable,
         button: true,
         child: Material(
           color: Colors.transparent,
@@ -427,7 +430,9 @@ class _DeviceScannerScreenState extends ConsumerState<DeviceScannerScreen> {
             borderRadius: BorderRadius.circular(20),
             highlightColor: Colors.white.withValues(alpha: 0.05),
             splashColor: Colors.indigoAccent.withValues(alpha: 0.2),
-            onTap: () => ref.read(connectionProvider.notifier).connect(device),
+            onTap: controllable
+                ? () => ref.read(connectionProvider.notifier).connect(device)
+                : () => _explainUnsupported(device),
             child: Padding(
               padding: const EdgeInsets.all(20.0),
               child: Row(
@@ -477,9 +482,12 @@ class _DeviceScannerScreenState extends ConsumerState<DeviceScannerScreen> {
                             // A remembered device is shown before the network
                             // has confirmed it, so the row has to be honest
                             // about which of the two it is.
-                            if (isRemembered) ...[
+                            if (!controllable) ...[
                               const SizedBox(width: 8),
-                              const _SavedBadge(),
+                              const _RowBadge('Not supported'),
+                            ] else if (isRemembered) ...[
+                              const SizedBox(width: 8),
+                              const _RowBadge('Saved'),
                             ],
                           ],
                         ),
@@ -593,9 +601,13 @@ class _DeviceScannerScreenState extends ConsumerState<DeviceScannerScreen> {
   }
 }
 
-/// Marks a row restored from storage that this scan has not yet heard from.
-class _SavedBadge extends StatelessWidget {
-  const _SavedBadge();
+/// A short status word on a device row: "Saved" for an entry restored from
+/// storage this scan has not heard from, "Not supported" for a device type
+/// with no transport.
+class _RowBadge extends StatelessWidget {
+  const _RowBadge(this.text);
+
+  final String text;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -606,7 +618,7 @@ class _SavedBadge extends StatelessWidget {
       border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
     ),
     child: Text(
-      'Saved',
+      text,
       style: TextStyle(
         color: Colors.white.withValues(alpha: 0.55),
         fontSize: 11,
@@ -615,4 +627,93 @@ class _SavedBadge extends StatelessWidget {
       ),
     ),
   );
+}
+
+/// What to say when a sweep turns up nothing.
+///
+/// The previous advice was "Ensure you share the same Wi-Fi network", which is
+/// the one thing a user has almost always already done, and is not checkable
+/// from inside the app. The causes that actually bite are invisible from the
+/// phone: a guest SSID or a separate 2.4GHz band that presents as the same
+/// network, client isolation between Wi-Fi clients, or a TV configured to
+/// refuse external control. Each of those has a specific place to look.
+/// Only reachable once a scan has finished: while one is running with nothing
+/// found yet, [_buildDeviceList] is not called at all and the radar shows
+/// instead. Advice offered before the sweep has had its chance would read as a
+/// failure that has not happened yet.
+class _NothingFound extends StatelessWidget {
+  const _NothingFound();
+
+  static const _checks = [
+    'The TV may be on a guest network or a separate 2.4GHz band. Those look '
+        'like the same Wi-Fi and are not.',
+    'Some routers isolate Wi-Fi clients from each other. Look for "AP '
+        'isolation" or "client isolation".',
+    'On a Roku, Settings > System > Advanced system settings > Control by '
+        'mobile apps must not be Disabled.',
+    'Read the address off the TV (Roku: Settings > Network > About) and use '
+        'Manual IP below.',
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.05),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                LucideIcons.wifiOff,
+                size: 40,
+                color: Colors.white.withValues(alpha: 0.5),
+              ),
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              'No devices found',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 16),
+            for (final check in _checks)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6, right: 10),
+                      child: Icon(
+                        LucideIcons.dot,
+                        size: 8,
+                        color: Colors.white.withValues(alpha: 0.4),
+                      ),
+                    ),
+                    Expanded(
+                      child: Text(
+                        check,
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.55),
+                          fontSize: 13,
+                          height: 1.45,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
 }

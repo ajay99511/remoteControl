@@ -40,6 +40,38 @@ enum DeviceType {
   }
 
   String toJson() => name;
+
+  /// How to name this type to a user. `name` alone yields "googleTv".
+  String get label => switch (this) {
+    roku => 'Roku',
+    samsung => 'Samsung',
+    lg => 'LG',
+    vizio => 'Vizio',
+    fireTv => 'Fire TV',
+    googleTv => 'Google TV / Chromecast',
+    ir => 'infrared',
+    unknown => 'unrecognised',
+  };
+
+  /// Whether this app can actually drive a device of this type.
+  ///
+  /// Discovery lists whatever answers on the network, which includes hosts
+  /// this app has no transport for: every `_googlecast._tcp` responder maps
+  /// here as [googleTv], and an AirPlay announcement names no vendor at all
+  /// and lands as [unknown]. Both used to be offered as ordinary tappable
+  /// rows, so a user would pick their Chromecast, wait through a connect
+  /// attempt, and be told it failed - when the controller for it throws
+  /// `UnsupportedDeviceException` on the first line of `connect()` and never
+  /// had a chance.
+  ///
+  /// Exhaustive on purpose: adding a vendor forces a decision here rather
+  /// than inheriting a default.
+  bool get isControllable => switch (this) {
+    roku || samsung || lg || vizio => true,
+    // fireTv and googleTv are stubs; ir has no platform channel; unknown is
+    // by definition something we could not identify.
+    fireTv || googleTv || ir || unknown => false,
+  };
 }
 
 /// Default control port per device type.

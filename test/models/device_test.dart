@@ -180,4 +180,34 @@ void main() {
       expect(kDefaultPorts[DeviceType.vizio], 7345);
     });
   });
+
+  group('DeviceType.isControllable', () {
+    test('is true exactly for the vendors with a working transport', () {
+      // The discovery screen lists whatever answers, including Chromecasts
+      // that reply to _googlecast._tcp and AirPlay responders that name no
+      // vendor at all. Offering those as tappable rows means the user picks
+      // one, waits, and is told it failed - when nothing was ever going to
+      // work.
+      expect(DeviceType.roku.isControllable, isTrue);
+      expect(DeviceType.samsung.isControllable, isTrue);
+      expect(DeviceType.lg.isControllable, isTrue);
+      expect(DeviceType.vizio.isControllable, isTrue);
+    });
+
+    test('is false for every type whose controller refuses to connect', () {
+      // Each of these throws from connect(): the two stubs, the IR controller
+      // with no platform channel, and an unrecognised responder.
+      expect(DeviceType.fireTv.isControllable, isFalse);
+      expect(DeviceType.googleTv.isControllable, isFalse);
+      expect(DeviceType.ir.isControllable, isFalse);
+      expect(DeviceType.unknown.isControllable, isFalse);
+    });
+
+    test('covers every enum value', () {
+      // A new vendor must make a deliberate choice here rather than defaulting.
+      for (final type in DeviceType.values) {
+        expect(() => type.isControllable, returnsNormally);
+      }
+    });
+  });
 }
