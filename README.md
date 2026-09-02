@@ -13,7 +13,7 @@ vendor's own control protocol.
 | **LG** (webOS) | SSAP over WebSocket, port 3000, plus the pointer input socket | Working — volume, channel, playback, app launch, and the D-pad. webOS carries the arrows on a second socket requested at registration; OK goes the same way, since `sendEnterKey` is an IME operation that does nothing without a focused text field. A TV that will not grant the socket keeps OK on the IME path and reports the arrows as unsupported. Unverified against real hardware. |
 | **Vizio** (SmartCast) | REST over TLS, port 7345, TOFU pinning | Partial — key commands work. Text entry and app launch report unsupported: SmartCast exposes no text endpoint on this API, and app launch needs per-app payloads this controller does not carry. Pairing (PIN entry) is not implemented, so a TV that has never been paired returns 401 and reports that it needs pairing. |
 | **Fire TV** | — | Not implemented. Reports unsupported. |
-| **Google TV / Android TV** | — | Not implemented. Reports unsupported. Note that discovery maps every `_googlecast._tcp` responder here, so ordinary Chromecasts appear and cannot be controlled. |
+| **Google TV / Android TV** | — | Not implemented. Discovery maps every `_googlecast._tcp` responder here, so ordinary Chromecasts appear in the list; they are shown dimmed and badged "Not supported" rather than offered as something to tap. |
 | **IR blaster** | Android `ConsumerIrManager` | Not implemented. There is no platform channel; `connect()` refuses rather than presenting a remote that transmits nothing. |
 
 Discovered devices are named from their own UPnP / ECP description, so the
@@ -122,12 +122,17 @@ what the app asks, and scans every port a controller connects on.
    bad build cannot be superseded remotely.
 4. **Vizio pairing (PIN entry) is not implemented.** An unpaired TV is
    correctly reported as needing pairing, but there is no flow to complete it.
-5. **No iOS multicast entitlement.** iOS 14 and later require
+5. **iOS multicast entitlement is not wired up.** iOS 14 and later require
    `com.apple.developer.networking.multicast` to send to a multicast address,
-   and Apple grants it only on request. There is no `.entitlements` file, so
-   SSDP discovery cannot work on a real iPhone or iPad - Bonjour/mDNS still
-   can, but Roku does not advertise over Bonjour, so a Roku would never be
-   discovered on iOS. Manual IP is unaffected.
+   and Apple grants it only on request
+   (<https://developer.apple.com/contact/request/networking-multicast>).
+   `ios/Runner/Runner.entitlements` holds the correct content, but
+   `project.pbxproj` has no `CODE_SIGN_ENTITLEMENTS` setting, so it is inert
+   until someone opens the project on a Mac and sets it for the Debug,
+   Release and Profile configurations. Until then SSDP discovery finds nothing
+   on real iOS hardware - Bonjour/mDNS still works, but Roku does not
+   advertise over Bonjour, so a Roku would never appear. Manual IP is
+   unaffected. This could not be wired or verified from a Windows checkout.
 
 Android cleartext HTTP was checked and deliberately left alone: Roku ECP is
 plain `http://` and Android blocks cleartext by default since API 28, but that

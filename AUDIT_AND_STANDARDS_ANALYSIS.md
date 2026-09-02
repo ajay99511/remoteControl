@@ -29,8 +29,8 @@ finding, each with a test confirmed failing against the unfixed code first.
 
 | Measure | Before | After |
 |---|---:|---:|
-| Tests passing | 20 | **232** |
-| Line coverage | 27.2% | **76.5%** |
+| Tests passing | 20 | **244** |
+| Line coverage | 27.2% | **77.3%** |
 | `flutter analyze` | 15 issues (default lints) | **0** (with `dead_code`, `unawaited_futures`, `strict-casts` promoted to errors) |
 | Suite wall clock | ~30 s (real sockets) | ~14 s (no real I/O) |
 | CI | none | format + analyze + test + coverage floor + APK build |
@@ -133,6 +133,52 @@ things a TV and a phone settle, not more code.
 a completion landing after the last timer needs an explicit `flushMicrotasks()`;
 and awaiting a `StreamSubscription.cancel()` whose controller was built outside
 the fake zone suspends on a future the fake clock cannot advance.
+
+### Fourth follow-up: a reported failure to connect
+
+Prompted by a real report - "same network as the TV, still cannot connect" -
+and investigated with `tool/probe_network.dart` rather than by reading code.
+
+**The finding was that the network, not the app, was at fault:** an SSDP sweep
+drew no responders, and a TCP sweep of all 254 hosts on the reporter's `/24`
+found no vendor control port open on any of them. The TCP result is the
+conclusive one: a host firewall routinely hides SSDP replies, because they
+arrive from `<tv>:1900` while the request went to `239.255.255.250:1900` and
+stateful filters do not match those as one flow, but it cannot hide an
+outbound TCP connect.
+
+That is a satisfying answer for an engineer and a useless one for a user, and
+the app gave them nothing. Three gaps stood between the report and the
+diagnosis:
+
+| # | Finding | Status |
+|---|---|---|
+| P-1 | **Nothing in the repo could distinguish "the app is wrong" from "the network never carried the request".** Added `tool/probe_network.dart`: interfaces, the app's exact M-SEARCH with every responder's headers, a TCP sweep for all five control ports, and the exact Roku ECP request `RokuController.connect()` issues. It is pure `dart:io` so it runs standalone, and a test asserts it asks byte-for-byte what the app asks. | Fixed |
+| P-2 | **Rows that could never connect looked like rows that could.** Discovery lists whatever answers, including every `_googlecast._tcp` responder (mapped to `googleTv`) and AirPlay announcements that name no vendor (`unknown`). Both were ordinary tappable rows, so a user picked their Chromecast, waited out a connect attempt, and was told it failed - when the controller throws on the first line of `connect()`. Now dimmed, badged, excluded from the semantics tree as tappable, and self-explaining on touch. | Fixed |
+| P-3 | **The empty state offered the one piece of advice the user had already followed.** "Ensure you share the same Wi-Fi network" is not checkable from inside the app. The causes that actually bite are invisible from the phone: a guest SSID or separate 2.4GHz band presenting as the same network, client isolation, a TV set to refuse external control. Each is now named with the place to look. | Fixed |
+
+**A platform blocker was proved rather than suspected:** iOS 14+ requires the
+`com.apple.developer.networking.multicast` entitlement to send to a multicast
+address, and the project has no `CODE_SIGN_ENTITLEMENTS` setting at all. SSDP
+discovery therefore cannot work on real iOS hardware, and since Roku does not
+advertise over Bonjour, a Roku would never be discovered there.
+`ios/Runner/Runner.entitlements` now holds the correct content, but wiring it
+into `project.pbxproj` needs a Mac and could not be verified here.
+
+**A suspected cause was investigated and rejected:** Roku ECP is plain
+`http://`, and Android has blocked cleartext by default since API 28, which
+makes `usesCleartextTraffic` look like the obvious culprit. It is not: that
+policy is enforced by the Java HTTP stacks, and this app reaches the network
+through `dart:io`, which does not consult it. Setting the flag would have
+weakened the app app-wide to fix a problem it does not have - the same
+reasoning that removed the deprecated `encryptedSharedPreferences` option
+earlier in this work.
+
+**One guard was deleted rather than covered.** A check for "do not show
+troubleshooting advice while a scan is still running" turned out to be
+unreachable: with no devices found the screen renders the radar and never
+builds the empty state. The guard and the test written for it are both gone,
+and the widget records why.
 
 **Two corrections to this audit were made during remediation**, both marked
 in place where the original claim appears — the H-3 caret/reversion detail,
