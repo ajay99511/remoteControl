@@ -153,4 +153,139 @@ void main() {
       expect(await service.loadCertFingerprint('10.9.9.9'), isNull);
     });
   });
+
+  group('known devices', () {
+    const bedroom = Device(
+      id: 'ssdp:abc',
+      name: 'Bedroom TV',
+      type: DeviceType.lg,
+      model: 'OLED55',
+      ip: '192.168.1.60',
+      port: 3000,
+      uid: 'ssdp:abc',
+    );
+
+    setUp(() {
+      when(storage.read(key: 'known_devices_v1')).thenAnswer((_) async => null);
+    });
+
+    test('remembers a device under a list key', () async {
+      await service.rememberDevice(device);
+
+      final written = verify(
+        storage.write(key: 'known_devices_v1', value: captureAnyNamed('value')),
+      ).captured.single;
+      final list = jsonDecode(written as String) as List<dynamic>;
+      expect(list, hasLength(1));
+      expect(list.first, containsPair('name', 'Living Room Roku'));
+    });
+
+    test('restores every remembered device', () async {
+      when(storage.read(key: 'known_devices_v1')).thenAnswer(
+        (_) async => jsonEncode([device.toJson(), bedroom.toJson()]),
+      );
+
+      final known = await service.loadKnownDevices();
+
+      expect(known.map((d) => d.name), ['Living Room Roku', 'Bedroom TV']);
+    });
+
+    test(
+      'moves the most recent device to the front without duplicating it',
+      () async {
+        // The same television, seen again at a new address after a DHCP lease
+        // renewal. Keying the list on credentialKey is what stops it appearing
+        // twice - once at each address it has ever held.
+        final moved = bedroom.copyWith(ip: '192.168.1.77');
+        when(storage.read(key: 'known_devices_v1')).thenAnswer(
+          (_) async => jsonEncode([bedroom.toJson(), device.toJson()]),
+        );
+
+        await service.rememberDevice(moved);
+
+        final written = verify(
+          storage.write(
+            key: 'known_devices_v1',
+            value: captureAnyNamed('value'),
+          ),
+        ).captured.single;
+        final list = (jsonDecode(written as String) as List<dynamic>)
+            .cast<Map<String, dynamic>>()
+            .map(Device.fromJson)
+            .toList();
+
+        expect(list, hasLength(2));
+        expect(list.first.ip, '192.168.1.77');
+        expect(list.last.name, 'Living Room Roku');
+      },
+    );
+
+    test(
+      'keeps the list bounded, discarding the least recently used',
+      () async {
+        final crowd = [
+          for (var i = 0; i < 8; i++)
+            device.copyWith(id: 'old-$i', uid: 'ssdp:old-$i', name: 'Old $i'),
+        ];
+        when(storage.read(key: 'known_devices_v1')).thenAnswer(
+          (_) async => jsonEncode([for (final d in crowd) d.toJson()]),
+        );
+
+        await service.rememberDevice(bedroom);
+
+        final written = verify(
+          storage.write(
+            key: 'known_devices_v1',
+            value: captureAnyNamed('value'),
+          ),
+        ).captured.single;
+        final list = jsonDecode(written as String) as List<dynamic>;
+
+        expect(list, hasLength(8), reason: 'storage must not grow without end');
+        expect(list.first, containsPair('name', 'Bedroom TV'));
+        expect(
+          list.map((d) => (d as Map<String, dynamic>)['name']),
+          isNot(contains('Old 7')),
+        );
+      },
+    );
+
+    test('forgetting a device removes only that one', () async {
+      when(storage.read(key: 'known_devices_v1')).thenAnswer(
+        (_) async => jsonEncode([bedroom.toJson(), device.toJson()]),
+      );
+
+      await service.forgetDevice(bedroom);
+
+      final written = verify(
+        storage.write(key: 'known_devices_v1', value: captureAnyNamed('value')),
+      ).captured.single;
+      final list = jsonDecode(written as String) as List<dynamic>;
+
+      expect(list, hasLength(1));
+      expect(list.single, containsPair('name', 'Living Room Roku'));
+    });
+
+    test('a corrupt list reads as empty rather than throwing', () async {
+      // Anything that cannot be parsed must not stop the app from starting.
+      when(
+        storage.read(key: 'known_devices_v1'),
+      ).thenAnswer((_) async => 'not json');
+
+      expect(await service.loadKnownDevices(), isEmpty);
+    });
+
+    test('skips entries that no longer parse, keeping the rest', () async {
+      when(storage.read(key: 'known_devices_v1')).thenAnswer(
+        (_) async => jsonEncode([
+          {'id': 'broken'},
+          device.toJson(),
+        ]),
+      );
+
+      expect((await service.loadKnownDevices()).map((d) => d.name), [
+        'Living Room Roku',
+      ]);
+    });
+  });
 }

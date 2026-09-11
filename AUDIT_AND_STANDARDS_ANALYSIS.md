@@ -29,10 +29,10 @@ finding, each with a test confirmed failing against the unfixed code first.
 
 | Measure | Before | After |
 |---|---:|---:|
-| Tests passing | 20 | **164** |
-| Line coverage | 27.2% | **73.6%** |
+| Tests passing | 20 | **244** |
+| Line coverage | 27.2% | **77.3%** |
 | `flutter analyze` | 15 issues (default lints) | **0** (with `dead_code`, `unawaited_futures`, `strict-casts` promoted to errors) |
-| Suite wall clock | ~30 s (real sockets) | ~8 s (no real I/O) |
+| Suite wall clock | ~30 s (real sockets) | ~14 s (no real I/O) |
 | CI | none | format + analyze + test + coverage floor + APK build |
 | Files at 0% coverage | `remote.dart`, `remote_buttons.dart`, `lg_controller.dart`, `vizio_controller.dart` | two unreachable stubs |
 
@@ -76,6 +76,109 @@ be checked on hardware before release.
 If the saved address is stale, reconnect still fails — it just no longer loses
 the pairing along with it. Closing that needs the scanner and the connection
 provider to talk to each other.
+
+### Second follow-up: conformance with what real devices actually do
+
+Reviewing the wire behaviour against the vendor protocols, rather than against
+our own tests, found four more. Each is a case of the app not using
+information the device was already sending it.
+
+| # | Finding | Status |
+|---|---|---|
+| R-1 | **Device names were invented.** Discovery labelled from a hardcoded lookup keyed off the `SERVER` header, so every Samsung was "Samsung TV" and a house with two produced two indistinguishable rows. SSDP's `LOCATION` serves a UPnP description with `<friendlyName>`, `<modelName>` and `<UDN>`; Roku ECP `query/device-info` returns the same, and `RokuController.connect()` was checking the status code and discarding the body. | Fixed |
+| R-2 | **`ST: ssdp:all` only.** Asks every UPnP device on the segment to answer — noisy, slower to filter, rate-limited by some access points. Real remotes ask for what they can control (`roku:ecp`, DIAL, MediaRenderer). `MX: 3` also spread replies over three seconds for no benefit. | Fixed |
+| R-3 | **Listened after probing.** The socket listener was attached only once all three probe rounds had been sent — roughly a second after the first request went out. Found by a test that could not see a device it had just delivered. | Fixed |
+| R-4 | **webOS permissions did not cover the URIs sent.** `CONTROL_INPUT_TEXT` was never requested, and `RemoteKey.ok`/`select` route to `ssap://com.webos.service.ime/sendEnterKey` — so a real LG TV denied the OK button. `CONTROL_INPUT_MEDIA_PLAYBACK` was missing too. Meanwhile `CHECK_3D` (left over from H-1) and `READ_INSTALLED_APPS` were requested and unused. Now derived from a URI→permission map with a test that fails on drift. | Fixed |
+
+**Still unverified, and it needs hardware:** whether modern webOS firmware
+also requires the signed manifest block LG's own app sends. That blob could
+not be reproduced reliably, and a wrong one is worse than none, so it is
+deliberately absent. Pairing against a real LG TV is the check that settles it.
+
+### Third follow-up: remembering devices and reconnecting to them
+
+A review of the whole path a user actually walks - open the app, find the
+television, connect, control it, come back tomorrow - against how the vendors'
+own mobile remotes behave. Three gaps, all in the space between "the protocol
+works" and "the product works".
+
+| # | Finding | Status |
+|---|---|---|
+| Q-1 | **Only one device was ever remembered.** `last_device_v1` held a single entry, for auto-reconnect. The discovery screen therefore opened blank every time and made the user wait out a multi-second sweep, however many times they had connected before. Devices the user has connected to are now kept in a bounded MRU list (8), keyed on `credentialKey` so a television that moved between DHCP leases updates its entry rather than appearing once per address it has held. The scanner seeds from it before probing; a live sighting merges over the remembered entry. Entries not yet confirmed on this network are marked "Saved", on screen and in their semantics label. | Fixed |
+| Q-2 | **A remembered device that moved was unreachable.** Identity has been stable since N-1, but nothing used it to go and look. Reconnecting to a device whose address the router had reassigned meant five attempts against whatever now lives there - fifteen seconds of backoff ending in "could not connect", for a TV that was powered on two addresses away. A connect chain now re-resolves once, before spending its retry budget, accepting only a response whose stable id matches. Only the address is adopted; name, model and the paired port are ours already. | Fixed |
+| Q-3 | **LG had no D-pad at all.** webOS exposes no SSAP URI for the arrow keys; they exist only on the pointer input socket, and this controller never requested it. After H-1 removed the 3D-toggle mis-mapping, up/down/left/right honestly reported "unsupported" - a remote with no navigation. The socket is now requested at registration and the arrows travel over it. OK moves there too: `sendEnterKey` is an IME operation that commits text in a focused field, so on a home screen it does nothing. | Fixed |
+
+Two latent defects surfaced while doing the above, both fixed:
+
+- **An in-flight UDP socket could be orphaned.** Binding is asynchronous, and a
+  `stopScan` or rescan landing in that window left the probe to adopt a socket
+  belonging to a scan that no longer existed, with nothing holding a reference
+  to close it. A scan generation counter closes it instead. Two existing
+  lifecycle tests caught this once an added `await` shifted the interleaving.
+- **The "is this the same device" rule was about to be written twice** - once in
+  `mergeDiscovered`, once in the scanner's remembered-device bookkeeping.
+  Extracted as `indexOfDevice` before the second copy existed.
+
+**Unverified, and it needs hardware:** the pointer socket's line protocol and
+button names are written from the documented format, not from a session with a
+real television. Every part of it degrades rather than fails - a TV that will
+not grant the socket leaves OK on the IME path exactly as before, and
+`supportedKeys` only admits the arrows once the socket is open - so if the
+format is wrong the arrows stay unavailable, which is where they already were.
+This joins the webOS signed-manifest question and the Android multicast lock as
+things a TV and a phone settle, not more code.
+
+**Two facts about the test harness**, recorded because they cost time twice:
+`fake_async`'s `elapse()` does not drain the microtask queue on the way out, so
+a completion landing after the last timer needs an explicit `flushMicrotasks()`;
+and awaiting a `StreamSubscription.cancel()` whose controller was built outside
+the fake zone suspends on a future the fake clock cannot advance.
+
+### Fourth follow-up: a reported failure to connect
+
+Prompted by a real report - "same network as the TV, still cannot connect" -
+and investigated with `tool/probe_network.dart` rather than by reading code.
+
+**The finding was that the network, not the app, was at fault:** an SSDP sweep
+drew no responders, and a TCP sweep of all 254 hosts on the reporter's `/24`
+found no vendor control port open on any of them. The TCP result is the
+conclusive one: a host firewall routinely hides SSDP replies, because they
+arrive from `<tv>:1900` while the request went to `239.255.255.250:1900` and
+stateful filters do not match those as one flow, but it cannot hide an
+outbound TCP connect.
+
+That is a satisfying answer for an engineer and a useless one for a user, and
+the app gave them nothing. Three gaps stood between the report and the
+diagnosis:
+
+| # | Finding | Status |
+|---|---|---|
+| P-1 | **Nothing in the repo could distinguish "the app is wrong" from "the network never carried the request".** Added `tool/probe_network.dart`: interfaces, the app's exact M-SEARCH with every responder's headers, a TCP sweep for all five control ports, and the exact Roku ECP request `RokuController.connect()` issues. It is pure `dart:io` so it runs standalone, and a test asserts it asks byte-for-byte what the app asks. | Fixed |
+| P-2 | **Rows that could never connect looked like rows that could.** Discovery lists whatever answers, including every `_googlecast._tcp` responder (mapped to `googleTv`) and AirPlay announcements that name no vendor (`unknown`). Both were ordinary tappable rows, so a user picked their Chromecast, waited out a connect attempt, and was told it failed - when the controller throws on the first line of `connect()`. Now dimmed, badged, excluded from the semantics tree as tappable, and self-explaining on touch. | Fixed |
+| P-3 | **The empty state offered the one piece of advice the user had already followed.** "Ensure you share the same Wi-Fi network" is not checkable from inside the app. The causes that actually bite are invisible from the phone: a guest SSID or separate 2.4GHz band presenting as the same network, client isolation, a TV set to refuse external control. Each is now named with the place to look. | Fixed |
+
+**A platform blocker was proved rather than suspected:** iOS 14+ requires the
+`com.apple.developer.networking.multicast` entitlement to send to a multicast
+address, and the project has no `CODE_SIGN_ENTITLEMENTS` setting at all. SSDP
+discovery therefore cannot work on real iOS hardware, and since Roku does not
+advertise over Bonjour, a Roku would never be discovered there.
+`ios/Runner/Runner.entitlements` now holds the correct content, but wiring it
+into `project.pbxproj` needs a Mac and could not be verified here.
+
+**A suspected cause was investigated and rejected:** Roku ECP is plain
+`http://`, and Android has blocked cleartext by default since API 28, which
+makes `usesCleartextTraffic` look like the obvious culprit. It is not: that
+policy is enforced by the Java HTTP stacks, and this app reaches the network
+through `dart:io`, which does not consult it. Setting the flag would have
+weakened the app app-wide to fix a problem it does not have - the same
+reasoning that removed the deprecated `encryptedSharedPreferences` option
+earlier in this work.
+
+**One guard was deleted rather than covered.** A check for "do not show
+troubleshooting advice while a scan is still running" turned out to be
+unreachable: with no devices found the screen renders the radar and never
+builds the empty state. The guard and the test written for it are both gone,
+and the widget records why.
 
 **Two corrections to this audit were made during remediation**, both marked
 in place where the original claim appears — the H-3 caret/reversion detail,

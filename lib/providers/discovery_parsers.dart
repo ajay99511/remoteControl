@@ -85,6 +85,22 @@ String? _uidFromUsn(String? usn) {
   return withoutScheme.isEmpty ? null : 'ssdp:$withoutScheme';
 }
 
+/// The UPnP device description URL an SSDP response points at.
+///
+/// Fetching it is how a device's real name is obtained; without it the
+/// scanner can only guess from the SERVER header and label every Samsung on
+/// the network "Samsung TV".
+Uri? ssdpLocationOf(String response) {
+  final raw = _parseHeaders(response)['LOCATION'];
+  if (raw == null || raw.isEmpty) return null;
+  final uri = Uri.tryParse(raw);
+  if (uri == null || !uri.hasScheme || uri.host.isEmpty) return null;
+  // Only http(s); a LOCATION naming any other scheme is not something to
+  // dereference on the strength of a broadcast from an unauthenticated host.
+  if (uri.scheme != 'http' && uri.scheme != 'https') return null;
+  return uri;
+}
+
 /// Splits an SSDP response into upper-cased header keys.
 ///
 /// Splits on `\r?\n` rather than `\r\n`: a responder that terminates lines
@@ -149,6 +165,22 @@ Device? parseMdnsService({
   );
 }
 
+/// Where [candidate] already sits in [known], or -1.
+///
+/// The one place this rule is written down. The scanner needs the same answer
+/// [mergeDiscovered] uses - to tell whether a live sighting has confirmed a
+/// device restored from storage - and two copies of the rule would drift.
+///
+/// Matches on the stable id when both sides have one, so the same television
+/// answering on a new address is recognised rather than listed twice.
+int indexOfDevice(List<Device> known, Device candidate) {
+  if (candidate.uid != null) {
+    final byUid = known.indexWhere((d) => d.uid == candidate.uid);
+    if (byUid >= 0) return byUid;
+  }
+  return known.indexWhere((d) => d.ip == candidate.ip);
+}
+
 /// Merges [candidate] into [known], keyed by host.
 ///
 /// Deduping on (ip, port) let one television appear two or three times: mDNS
@@ -160,12 +192,7 @@ Device? parseMdnsService({
 /// A later announcement only fills gaps; it never overwrites a more specific
 /// answer that arrived first.
 List<Device> mergeDiscovered(List<Device> known, Device candidate) {
-  // Match on the stable id when both sides have one, so the same television
-  // answering on a new address is recognised rather than listed twice.
-  var index = candidate.uid == null
-      ? -1
-      : known.indexWhere((d) => d.uid == candidate.uid);
-  if (index < 0) index = known.indexWhere((d) => d.ip == candidate.ip);
+  final index = indexOfDevice(known, candidate);
   if (index < 0) return [...known, candidate];
 
   final existing = known[index];

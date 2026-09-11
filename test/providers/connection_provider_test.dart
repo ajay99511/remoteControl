@@ -16,6 +16,7 @@ import 'package:devicecontroller/models/remote_key.dart';
 import 'package:devicecontroller/providers/connection_provider.dart';
 import 'package:devicecontroller/services/connectivity_service.dart';
 import 'package:devicecontroller/services/device_persistence_service.dart';
+import 'package:devicecontroller/services/device_resolver.dart';
 
 import '../fakes/fake_controller.dart';
 import 'connection_provider_test.mocks.dart';
@@ -67,6 +68,17 @@ void main() {
         ConnectionStatus.connected,
       );
       verify(mockPersistence.saveDevice(testDevice)).called(1);
+    });
+
+    test('remembers the device so the next scan can show it at once', () async {
+      final container = containerWith(FakeController());
+      addTearDown(container.dispose);
+
+      await container.read(connectionProvider.notifier).connect(testDevice);
+
+      // Only devices that actually connected are worth remembering; a failed
+      // attempt against a mistyped address is not a device the user owns.
+      verify(mockPersistence.rememberDevice(testDevice)).called(1);
     });
 
     test('retries a transient failure and gives up after 4 attempts', () {
@@ -356,6 +368,134 @@ void main() {
       await container.read(connectionProvider.notifier).disconnect();
 
       verify(mockPersistence.clearDevice()).called(1);
+    });
+  });
+
+  group('ConnectionNotifier re-resolution', () {
+    /// The television the user knows, at the address it held last time.
+    const moved = Device(
+      id: 'ssdp:lg-1',
+      name: 'Bedroom TV',
+      type: DeviceType.lg,
+      model: 'OLED55',
+      ip: '192.168.1.60',
+      port: 3000,
+      uid: 'ssdp:lg-1',
+    );
+
+    /// A container whose controllers succeed only at [liveAddress], and whose
+    /// resolver reports the device living there.
+    ProviderContainer containerFor({
+      required String liveAddress,
+      Device? resolvesTo,
+      void Function(Device)? onResolve,
+    }) => ProviderContainer(
+      overrides: [
+        devicePersistenceProvider.overrideWithValue(mockPersistence),
+        connectivityServiceProvider.overrideWithValue(mockConnectivity),
+        deviceControllerFactoryProvider.overrideWithValue(
+          (device) => device.ip == liveAddress
+              ? FakeController()
+              : FakeController(
+                  connectError: const SocketException('no route to host'),
+                ),
+        ),
+        deviceAddressResolverProvider.overrideWithValue((device) async {
+          onResolve?.call(device);
+          return resolvesTo;
+        }),
+      ],
+    );
+
+    test('reconnects to a device that changed address', () async {
+      final container = containerFor(
+        liveAddress: '192.168.1.88',
+        resolvesTo: moved.copyWith(ip: '192.168.1.88'),
+      );
+      addTearDown(container.dispose);
+
+      await container.read(connectionProvider.notifier).connect(moved);
+
+      final state = container.read(connectionProvider);
+      expect(state.status, ConnectionStatus.connected);
+      expect(
+        state.device!.ip,
+        '192.168.1.88',
+        reason: 'a DHCP lease renewal is the ordinary case, not a failure',
+      );
+      // The corrected address is what gets remembered, or the next launch
+      // repeats the same doomed attempt.
+      verify(
+        mockPersistence.rememberDevice(
+          argThat(predicate<Device>((d) => d.ip == '192.168.1.88')),
+        ),
+      ).called(1);
+    });
+
+    test('looks for it once, not once per retry', () {
+      // Virtual clock: this chain spends its whole retry budget, and the real
+      // backoff ceilings add fifteen seconds to the suite for no extra proof.
+      fakeAsync((async) {
+        var lookups = 0;
+        final container = containerFor(
+          liveAddress: '192.168.1.88',
+          resolvesTo: null,
+          onResolve: (_) => lookups++,
+        );
+        addTearDown(container.dispose);
+
+        container.read(connectionProvider.notifier).connect(moved);
+        async.elapse(const Duration(seconds: 60));
+        async.flushMicrotasks();
+
+        expect(
+          container.read(connectionProvider).status,
+          ConnectionStatus.error,
+        );
+        expect(
+          lookups,
+          1,
+          reason:
+              'five multicast sweeps per connect attempt is a burst of '
+              'broadcast traffic for one answer that was not going to change',
+        );
+      });
+    });
+
+    test('does not look for a device that has no stable id', () async {
+      var lookups = 0;
+      final container = containerFor(
+        liveAddress: '192.168.1.88',
+        resolvesTo: null,
+        onResolve: (_) => lookups++,
+      );
+      addTearDown(container.dispose);
+
+      // testDevice was entered by hand: nothing to match an answer against.
+      await container.read(connectionProvider.notifier).connect(testDevice);
+
+      expect(lookups, 0);
+    });
+
+    test('a failure that re-resolution cannot fix still reports an error', () {
+      fakeAsync((async) {
+        final container = containerFor(
+          liveAddress: '192.168.1.88',
+          resolvesTo: moved,
+        );
+        addTearDown(container.dispose);
+
+        // The resolver finds it exactly where it already was, so the address
+        // was never the problem.
+        container.read(connectionProvider.notifier).connect(moved);
+        async.elapse(const Duration(seconds: 60));
+        async.flushMicrotasks();
+
+        expect(
+          container.read(connectionProvider).status,
+          ConnectionStatus.error,
+        );
+      });
     });
   });
 }

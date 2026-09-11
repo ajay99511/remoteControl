@@ -9,6 +9,7 @@ import 'package:devicecontroller/screens/device_scanner.dart';
 import 'package:devicecontroller/screens/manual_connect_dialog.dart';
 import 'package:devicecontroller/services/connectivity_service.dart';
 import 'package:devicecontroller/services/device_persistence_service.dart';
+import 'package:devicecontroller/services/ssdp.dart';
 
 import '../fakes/fake_datagram_socket.dart';
 import '../providers/connection_provider_test.mocks.dart';

@@ -10,11 +10,29 @@ vendor's own control protocol.
 |---|---|---|
 | **Roku** | ECP over HTTP, port 8060 | Working — keys, text entry, app launch |
 | **Samsung** (Tizen) | WebSocket, `wss://` 8002 with TOFU pinning, `ws://` 8001 legacy | Working — keys, text entry, app launch |
-| **LG** (webOS) | SSAP over WebSocket, port 3000 | Partial — volume, channel, playback, app launch. **D-pad arrows are not implemented**: webOS routes them over a separate pointer-input socket. They report as unsupported rather than firing an unrelated command. |
+| **LG** (webOS) | SSAP over WebSocket, port 3000, plus the pointer input socket | Working — volume, channel, playback, app launch, and the D-pad. webOS carries the arrows on a second socket requested at registration; OK goes the same way, since `sendEnterKey` is an IME operation that does nothing without a focused text field. A TV that will not grant the socket keeps OK on the IME path and reports the arrows as unsupported. Unverified against real hardware. |
 | **Vizio** (SmartCast) | REST over TLS, port 7345, TOFU pinning | Partial — key commands work. Text entry and app launch report unsupported: SmartCast exposes no text endpoint on this API, and app launch needs per-app payloads this controller does not carry. Pairing (PIN entry) is not implemented, so a TV that has never been paired returns 401 and reports that it needs pairing. |
 | **Fire TV** | — | Not implemented. Reports unsupported. |
-| **Google TV / Android TV** | — | Not implemented. Reports unsupported. Note that discovery maps every `_googlecast._tcp` responder here, so ordinary Chromecasts appear and cannot be controlled. |
+| **Google TV / Android TV** | — | Not implemented. Discovery maps every `_googlecast._tcp` responder here, so ordinary Chromecasts appear in the list; they are shown dimmed and badged "Not supported" rather than offered as something to tap. |
 | **IR blaster** | Android `ConsumerIrManager` | Not implemented. There is no platform channel; `connect()` refuses rather than presenting a remote that transmits nothing. |
+
+Discovered devices are named from their own UPnP / ECP description, so the
+list shows what the owner called the TV rather than a generic vendor label.
+Identity comes from the SSDP `USN` or the description's `UDN`, so a DHCP lease
+renewal does not orphan the pairing token or the certificate pin.
+
+## Remembering devices
+
+Devices you have connected to are kept in a bounded most-recently-used list
+(8) in secure storage, keyed on that stable identity rather than the address.
+They appear on the discovery screen immediately, before any probe has been
+answered, marked **Saved** until this scan hears from them.
+
+If a remembered device has moved — a DHCP lease renewal is the ordinary case —
+a connect attempt re-resolves it once over SSDP before spending its retry
+budget, and accepts only a response whose stable id matches. Without that, a
+television that was powered on and two addresses away produced fifteen seconds
+of backoff and "could not connect".
 
 ## Architecture
 
@@ -70,6 +88,27 @@ flutter test --coverage
 `unawaited_futures`, `cancel_subscriptions` — because each one would have
 caught a defect that shipped. See `AUDIT_AND_STANDARDS_ANALYSIS.md`.
 
+## Diagnosing "it will not connect"
+
+`tool/probe_network.dart` answers, from a machine on the same Wi-Fi, whether a
+device is reachable at all - before any app code is blamed:
+
+```
+dart run tool/probe_network.dart              # this machine's subnet
+dart run tool/probe_network.dart 192.168.1    # a specific subnet
+```
+
+It sends the app's exact M-SEARCH, then sweeps the subnet for every vendor
+control port over TCP, then issues the exact Roku ECP request the controller
+issues. The TCP sweep is the conclusive step: a host firewall can hide SSDP
+replies (they arrive from `<tv>:1900` while the request went to
+`239.255.255.250:1900`, which stateful filters do not match as one flow) but
+cannot hide an outbound TCP connect.
+
+The tool stands alone rather than importing the app, so that it runs under the
+plain Dart VM; `test/tool/probe_network_test.dart` asserts it asks byte-for-byte
+what the app asks, and scans every port a controller connects on.
+
 ## Known release blockers
 
 1. **`applicationId` is still `com.example.devicecontroller`**
@@ -83,6 +122,24 @@ caught a defect that shipped. See `AUDIT_AND_STANDARDS_ANALYSIS.md`.
    bad build cannot be superseded remotely.
 4. **Vizio pairing (PIN entry) is not implemented.** An unpaired TV is
    correctly reported as needing pairing, but there is no flow to complete it.
+5. **iOS multicast entitlement is not wired up.** iOS 14 and later require
+   `com.apple.developer.networking.multicast` to send to a multicast address,
+   and Apple grants it only on request
+   (<https://developer.apple.com/contact/request/networking-multicast>).
+   `ios/Runner/Runner.entitlements` holds the correct content, but
+   `project.pbxproj` has no `CODE_SIGN_ENTITLEMENTS` setting, so it is inert
+   until someone opens the project on a Mac and sets it for the Debug,
+   Release and Profile configurations. Until then SSDP discovery finds nothing
+   on real iOS hardware - Bonjour/mDNS still works, but Roku does not
+   advertise over Bonjour, so a Roku would never appear. Manual IP is
+   unaffected. This could not be wired or verified from a Windows checkout.
+
+Android cleartext HTTP was checked and deliberately left alone: Roku ECP is
+plain `http://` and Android blocks cleartext by default since API 28, but that
+policy is enforced by the Java HTTP stacks, and this app reaches the network
+through `dart:io`, which does not consult it. Adding
+`usesCleartextTraffic="true"` would weaken the app's posture app-wide to fix a
+problem it does not have.
 
 ## Permissions
 

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  NOT YET WIRED INTO THE XCODE PROJECT.
+
+  ios/Runner.xcodeproj/project.pbxproj has no CODE_SIGN_ENTITLEMENTS setting,
+  so this file is inert until someone opens the project on a Mac and sets it
+  for the Debug, Release and Profile configurations. It is committed because
+  the content is the part that is easy to get wrong, and because it records a
+  blocker that is otherwise invisible from a Windows checkout.
+
+  Why it is needed: since iOS 14, sending to a multicast address requires the
+  com.apple.developer.networking.multicast entitlement. SSDP discovery is a
+  UDP send to 239.255.255.250, so without this the scanner finds nothing at
+  all on real iOS hardware. Bonjour/mDNS still works via NSBonjourServices,
+  but Roku does not advertise over Bonjour, so a Roku would never appear.
+
+  Apple grants this entitlement by request, not automatically:
+  https://developer.apple.com/contact/request/networking-multicast
+  Until it is granted and provisioning is regenerated, Manual IP is the only
+  route to a device on iOS.
+-->
+<plist version="1.0">
+<dict>
+	<key>com.apple.developer.networking.multicast</key>
+	<true/>
+</dict>
+</plist>
